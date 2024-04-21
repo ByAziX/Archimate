@@ -75,6 +75,7 @@ var excel = $JExcel.new("Calibri 12 #333333");
 
 var sheet2 = excel.addSheet('Objects');
 var sheet3 = excel.addSheet('Ports');
+var sheet4 = excel.addSheet('FW Rules');
 
 // Set up some headers
 var headers = [
@@ -100,6 +101,7 @@ var formatHeader = excel.addStyle ({
 set_header(0, headers, formatHeader);
 set_header(1, ["Group Name", "Object Name", "IP", "Type"], formatHeader);
 set_header(2, ["Protocol", "Port", "Service Name","Port Name"], formatHeader);
+set_header(3, headers, formatHeader);
 
 
 
@@ -118,8 +120,8 @@ var current_row_object = 1;
 // Fonction pour récupérer et traiter les informations de la source selon le type
 function handleFlow(sourceId) {
     
-    var sourceType = $("#" + sourceId).attr('type');
-    var sourceName = $("#" + sourceId).attr('name');
+    var sourceType = sourceId.attr('type');
+    var sourceName = sourceId.attr('name');
     var sourceIPs = [];
     var sourceNames = [];
     var NodeFromGroup = [];
@@ -132,8 +134,8 @@ function handleFlow(sourceId) {
     switch (sourceType) {
         case "technology-interface":
 
-            sourceIPs = $("#"+sourceId).attr('name'); // get ip of the source
-            sourceNames_tab = get_node_name_from_interface($("#"+sourceId)[0].concept.id);
+            sourceIPs = sourceId.attr('name'); // get ip of the source
+            sourceNames_tab = get_node_name_from_interface(sourceId[0].concept.id);
 
             for (var i = 0; i < sourceNames_tab.length; i++) {
                 if (get_interface_ip_from_node(sourceNames_tab[i].attr('id')).length > 1){
@@ -152,12 +154,12 @@ function handleFlow(sourceId) {
             break;
         case "grouping":
 
-            NodeFromGroup.push(get_node_from_group($("#"+sourceId)[0].concept.id));            
+            NodeFromGroup.push(get_node_from_group(sourceId[0].concept.id));            
             NodeFromGroup.forEach(function(nodes){
                 nodes.forEach(function(node){
                     
-                    
-
+                    /*
+                    console.log("Node: "+sourceId.attr('type'))
                     get_interface_ip_from_node(node.attr('id')).forEach(function(ip){
                         if (get_interface_ip_from_node(node.attr('id')).length > 1){
                             console.log("Multiple IP from node for the same node")
@@ -173,32 +175,36 @@ function handleFlow(sourceId) {
                         console.log(sourceNames+"_"+ip+'_Host')
 
                     });
+                    */
+
+                    target = handleFlow(node) 
+                    sourceIPs = target.sourceIPs;
+                    sourceNames = target.sourceNames;
+
        
                 });
             });
 
-
-            
-            
-
             break;
         case "node":
-            sourceIPs = get_interface_ip_from_node($("#"+sourceId)[0].concept.id);
+            sourceIPs = get_interface_ip_from_node(sourceId[0].concept.id);
 
             sourceIPs.forEach(function(ip){
                 if (sourceIPs.length > 1){
                     console.log("Multiple IP from node for the same node")
-                    sourceNames.push($("#"+sourceId).attr('name')+"-"+ip);
-                    uniqueObject.add($("#"+sourceId).attr('name')+"-"+ip+"_"+ip+'_Host');
+                    sourceNames.push(sourceId.attr('name')+"-"+ip);
+                    uniqueObject.add(sourceId.attr('name')+"-"+ip+"_"+ip+'_Host');
 
                 }else{
-                    sourceNames.push($("#"+sourceId).attr('name'));
+                    sourceNames.push(sourceId.attr('name'));
                     uniqueObject.add(sourceNames+"_"+ip+'_Host');
 
                 }
                 console.log(sourceNames+"_"+ip+'_Host')
 
             });
+            
+            
 
             break;
         default:
@@ -264,8 +270,8 @@ function cleanString(input) {
 
 flowRelationship.each(function(flowRelationship) { // Note: 'node' is a Visual Object
     
-    source = handleFlow(flowRelationship.concept.source.id)
-    target = handleFlow(flowRelationship.concept.target.id);
+    source = handleFlow($("#" +flowRelationship.concept.source.id))
+    target = handleFlow($("#" +flowRelationship.concept.target.id))
     //console.log("RuleName: "+ flowRelationship.concept.name + " Source Name: "+source.sourceNames+" Source IP: "+source.sourceIPs+" Target Name: "+target.sourceNames+" Target IP: "+target.sourceIPs+' Port: '+flowRelationship.prop("port",true)+' Documentation: '+flowRelationship.concept.documentation);
 
     console.log("\n")
