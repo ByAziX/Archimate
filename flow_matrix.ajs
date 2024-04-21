@@ -3,7 +3,7 @@
  * 
  * Show some stats in a message alert box
  * 
- * (c) 2024 ByAziX
+ * (c) 2024 MILLET Hugo
  * 
  * This work is licensed under the HUMANS Licence described below.
  * 
@@ -52,6 +52,7 @@ var defaultFileName = model.name ? model.name + ".xlsx" : "Exported Model.xlsx";
 var exportFile = window.promptSaveFile({ title: "Export to Excel", filterExtensions: [ "*.xlsx" ], fileName: defaultFileName } );
 
 var current_row = 1;
+var current_row_fw = 1;
 
 uniqueObject = new Set(); // Initialise un Set vide pour collecter les object uniques
 uniquePorts = new Set(); // Initialise un Set vide pour collecter les ports uniques
@@ -96,18 +97,12 @@ var formatHeader = excel.addStyle ({
 	font: "Arial 12 #000000 B",
 });
 
-
-
 set_header(0, headers, formatHeader);
 set_header(1, ["Group Name", "Object Name", "IP", "Type"], formatHeader);
 set_header(2, ["Protocol", "Port", "Service Name","Port Name"], formatHeader);
 set_header(3, headers, formatHeader);
 
-
-
-
 function set_header(sheet_number, headers, formatHeader){
-    // Set the headers
     for(var i = 0; i < headers.length; i++) {
         excel.set(sheet_number, i, 0, headers[i], formatHeader);
         excel.set(sheet_number, i, undefined, "auto"); // column width is auto
@@ -136,13 +131,21 @@ function handleFlow(sourceId) {
 
             sourceIPs = sourceId.attr('name'); // get ip of the source
             sourceNames_tab = get_node_name_from_interface(sourceId[0].concept.id);
+            if (sourceNames_tab.length == 0){
+                console.log("VIP or LB")
+                sourceNames.push(sourceIPs.split("=")[0]);
+                sourceIPs = sourceIPs.split("=")[1];
 
-            for (var i = 0; i < sourceNames_tab.length; i++) {
-                if (get_interface_ip_from_node(sourceNames_tab[i].attr('id')).length > 1){
-                    console.log("Multiple IP for the same node")
-                    sourceNames.push(sourceNames_tab[i].attr('name')+"-"+sourceIPs);
-                }else{
-                    sourceNames.push(sourceNames_tab[i].attr('name'));
+
+            }else{
+                for (var i = 0; i < sourceNames_tab.length; i++) {
+                    if (get_interface_ip_from_node(sourceNames_tab[i].attr('id')).length > 1){
+                        console.log("Multiple IP for the same node")
+                        sourceNames.push(sourceNames_tab[i].attr('name')+"-"+sourceIPs);
+                    }else{
+                            sourceNames.push(sourceNames_tab[i].attr('name'));
+                    
+                    }
                 }
             }
 
@@ -157,31 +160,9 @@ function handleFlow(sourceId) {
             NodeFromGroup.push(get_node_from_group(sourceId[0].concept.id));            
             NodeFromGroup.forEach(function(nodes){
                 nodes.forEach(function(node){
-                    
-                    /*
-                    console.log("Node: "+sourceId.attr('type'))
-                    get_interface_ip_from_node(node.attr('id')).forEach(function(ip){
-                        if (get_interface_ip_from_node(node.attr('id')).length > 1){
-                            console.log("Multiple IP from node for the same node")
-                            sourceNames.push(node.attr('name')+"-"+ip);
-                            uniqueObject.add(node.attr('name')+"-"+ip+"_"+ip+'_Host');
-
-                        }else{
-                            sourceNames.push(node.attr('name'));
-                            uniqueObject.add(node.attr('name')+"_"+ip+'_Host');
-
-                        }
-                        sourceIPs.push(ip);
-                        console.log(sourceNames+"_"+ip+'_Host')
-
-                    });
-                    */
-
                     target = handleFlow(node) 
                     sourceIPs = target.sourceIPs;
                     sourceNames = target.sourceNames;
-
-       
                 });
             });
 
@@ -204,20 +185,14 @@ function handleFlow(sourceId) {
 
             });
             
-            
-
             break;
         default:
-            // Gestion d'autres types éventuels
             console.log("Unhandled source type: " + sourceType);
             break;
     }
 
-    
     return { sourceNames, sourceIPs };
 }
-
-
 
 function get_node_name_from_interface(interface_id){
     var node_name = [];
@@ -268,43 +243,64 @@ function cleanString(input) {
 }
 
 
+function addElementInExcel(sheet, column, row, value, style = null) {
+    if (style) {
+        excel.set(sheet, column, row, value, style);
+    } else {
+        excel.set(sheet, column, row, value);
+    }
+}
+
+function populateExcelRow(sheet, startColumn, row, data) {
+    data.forEach((value, index) => {
+        addElementInExcel(sheet, startColumn + index, row, value);
+    });
+}
+
 flowRelationship.each(function(flowRelationship) { // Note: 'node' is a Visual Object
     
     source = handleFlow($("#" +flowRelationship.concept.source.id))
     target = handleFlow($("#" +flowRelationship.concept.target.id))
-    //console.log("RuleName: "+ flowRelationship.concept.name + " Source Name: "+source.sourceNames+" Source IP: "+source.sourceIPs+" Target Name: "+target.sourceNames+" Target IP: "+target.sourceIPs+' Port: '+flowRelationship.prop("port",true)+' Documentation: '+flowRelationship.concept.documentation);
 
     console.log("\n")
 
-    var relation_name_str = cleanAndJoin(flowRelationship.concept.name);
-    var source_name_str = cleanAndJoin(source.sourceNames);
-    var source_ip_str = cleanAndJoin(source.sourceIPs);
-    var target_name_str = cleanAndJoin(target.sourceNames);
-    var target_ip_str = cleanAndJoin(target.sourceIPs);
-    var port_str = cleanAndJoin(flowRelationship.prop("port", true));
-    var relation_documentation_str = cleanAndJoin(flowRelationship.concept.documentation);
+    const rowData = [
+        cleanAndJoin(flowRelationship.concept.name),
+        cleanAndJoin(source.sourceNames),
+        cleanAndJoin(source.sourceIPs),
+        cleanAndJoin(target.sourceNames),
+        cleanAndJoin(target.sourceIPs),
+        cleanAndJoin(flowRelationship.prop("port", true)),
+        cleanAndJoin(flowRelationship.concept.documentation)
+    ];
 
+    // Populate the row in the Excel sheet
+    populateExcelRow(0, 0, current_row, rowData);
+    current_row++;
 
-    // Utilisez les variables *_str pour définir les valeurs dans Excel
-    excel.set(0, 0, current_row, relation_name_str);
-    excel.set(0, 1, current_row, source_name_str);
-    excel.set(0, 2, current_row, source_ip_str);
-    excel.set(0, 3, current_row, target_name_str);
-    excel.set(0, 4, current_row, target_ip_str);
-    excel.set(0, 5, current_row, port_str);
-    excel.set(0, 6, current_row, relation_documentation_str);        
+    console.log("\n");
+    console.log(flowRelationship.prop("FW", false));
+    if (flowRelationship.prop("FW", false) == "true") {
+       
+        populateExcelRow(3, 0, current_row_fw, rowData);
 
-    current_row++;}
+        current_row_fw++;
+    } else {
+        console.log("propName is false");
+    }
+}
 );
 
 
 uniqueObject.forEach(function(object) {
     var objectParts = object.split("_").map(cleanString); // Nettoie chaque partie après la division
-    console.log(object);
-    excel.set(1, 0, current_row_object, "");
-    excel.set(1, 1, current_row_object, objectParts[0]); // Nom du serveur
-    excel.set(1, 2, current_row_object, objectParts[1]); // Adresse IP
-    excel.set(1, 3, current_row_object, objectParts[2]); // Type de noeud
+    const rowData = [
+        "",
+        objectParts[0],
+        objectParts[1],
+        objectParts[2],
+    ];
+    populateExcelRow(1, 0, current_row_object, rowData);
     current_row_object++;
 });
 
@@ -312,11 +308,9 @@ uniqueObject.forEach(function(object) {
 current_row = 1;
 
 flowRelationship.each(function(flowRelationship) {
-    // Récupère les ports en assumant que flowRelationship.prop("port", true)
-    // retourne un tableau de ports pour cette relation
+    
     var ports = flowRelationship.prop("port", true);
 
-    // Ajoute chaque port au Set uniquePorts pour filtrer les valeurs uniques
     ports.forEach(function(port) {
         uniquePorts.add(port);
     });
@@ -329,14 +323,16 @@ uniquePorts.forEach(function(port) {
     var portNumber = parts[0];
     var protocol = parts[1];
 
-    // Utiliser le serviceMap pour trouver le service correspondant ou retourner 'Unknown'
     var serviceName = serviceMap[protocol] || 'Unknown';
+    
+    const rowData = [
+        portNumber,
+        protocol,
+        serviceName,
+        port
+    ];
 
-    // Écrire les données nettoyées et le service dans Excel
-    excel.set(2, 0, current_row, portNumber);
-    excel.set(2, 1, current_row, protocol);
-    excel.set(2, 2, current_row, serviceName);
-    excel.set(2, 3, current_row, port);
+    populateExcelRow(2, 0, current_row, rowData);
     current_row++;
 });
 
