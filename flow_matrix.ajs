@@ -18,6 +18,22 @@
  */
 
 
+const serviceMap = {
+    '443': 'HTTPS',
+    '80': 'HTTP',
+    '22': 'SSH',
+    '21': 'FTP',
+    '23': 'Telnet',
+    '25': 'SMTP',
+    '110': 'POP3',
+    '143': 'IMAP',
+    '389': 'LDAP',
+    '636': 'LDAPS',
+    '53': 'DNS',
+    '123': 'NTP',
+    '161': 'SNMP',
+  };
+
 console.show();
 console.clear();
 console.log("----------GET OBJECT NODE FROM MODEL-!!!!!!!!!!!!!!!!!!!!------------");
@@ -97,15 +113,17 @@ function set_header(sheet_number, headers, formatHeader){
 }
 
 
+var current_row_object = 1;
 
 // Fonction pour récupérer et traiter les informations de la source selon le type
 function handleFlow(sourceId) {
+    
     var sourceType = $("#" + sourceId).attr('type');
     var sourceName = $("#" + sourceId).attr('name');
     var sourceIPs = [];
     var sourceNames = [];
-    var uniqueObject = new Set(); // Initialise un Set vide pour collecter les object uniques
     var NodeFromGroup = [];
+
 
     print("sourceType: "+sourceType);
     print("sourceName: "+sourceName);
@@ -114,7 +132,11 @@ function handleFlow(sourceId) {
         case "technology-interface":
 
             sourceIPs = $("#"+sourceId).attr('name'); // get ip of the source
-            sourceNames = get_node_name_from_interface($("#"+sourceId)[0].concept.id);  
+            sourceNames = get_node_name_from_interface($("#"+sourceId)[0].concept.id);
+
+            console.log(sourceNames+"_"+sourceIPs+'_node')
+            uniqueObject.add(sourceName+"_"+sourceIPs+'_node');
+            
 
             break;
         case "grouping":
@@ -127,10 +149,28 @@ function handleFlow(sourceId) {
                 });
             });
 
+
+            // add the name_ip_type to the uniqueObject
+            sourceNames.forEach(function(name){
+                sourceIPs.forEach(function(ip){
+                    console.log(name+"_"+ip+'_node')
+                    uniqueObject.add(name+"_"+ip+'_node');
+                });
+            });
+
+            
+
             break;
         case "node":
             sourceNames.push($("#"+sourceId).attr('name'));
             sourceIPs = get_interface_ip_from_node($("#"+sourceId)[0].concept.id);
+
+            sourceIPs.forEach(function(ip){
+                console.log(sourceNames+"_"+ip+'_node')
+
+                uniqueObject.add(sourceNames+"_"+ip+'_node');
+            });
+
             break;
         default:
             // Gestion d'autres types éventuels
@@ -138,6 +178,7 @@ function handleFlow(sourceId) {
             break;
     }
 
+    
     return { sourceNames, sourceIPs };
 }
 
@@ -145,8 +186,9 @@ function handleFlow(sourceId) {
 
 function get_node_name_from_interface(interface_id){
     var node_name = [];
+    
     compositionRelationship.each(function(compositionRelationship) { // get all composition-relationship
-        if (compositionRelationship.concept.target.id == interface_id) { // if target of the composition-relationship is the source of the flow-relationship
+        if (compositionRelationship.concept.target.id == interface_id && $("#"+compositionRelationship.concept.source.id).attr("type") == "node") { // if target of the composition-relationship is the source of the flow-relationship
             node_name.push($("#"+compositionRelationship.concept.source.id).attr('name'));
         }       
     }
@@ -178,38 +220,35 @@ function get_node_from_group(group_id){
     return node;    
 }
 
+function cleanAndJoin(input) {
+    if (Array.isArray(input)) {
+        // S'assure que chaque élément est converti en chaîne avant de le nettoyer
+        return input.map(item => String(item).trim()).join('\n');
+    }
+    return String(input).trim();  // Convertit en chaîne puis applique trim
+}
 
-
-
-
-
-
-
-
+function cleanString(input) {
+    return input.trim();
+}
 
 
 flowRelationship.each(function(flowRelationship) { // Note: 'node' is a Visual Object
     
     source = handleFlow(flowRelationship.concept.source.id)
     target = handleFlow(flowRelationship.concept.target.id);
-    console.log("RuleName: "+ flowRelationship.concept.name + " Source Name: "+source.sourceNames+" Source IP: "+source.sourceIPs+" Target Name: "+target.sourceNames+" Target IP: "+target.sourceIPs+' Port: '+flowRelationship.prop("port",true)+' Documentation: '+flowRelationship.concept.documentation);
+    //console.log("RuleName: "+ flowRelationship.concept.name + " Source Name: "+source.sourceNames+" Source IP: "+source.sourceIPs+" Target Name: "+target.sourceNames+" Target IP: "+target.sourceIPs+' Port: '+flowRelationship.prop("port",true)+' Documentation: '+flowRelationship.concept.documentation);
 
     console.log("\n")
-    relation_name = flowRelationship.concept.name;
-    source_name = source.sourceNames;
-    source_ip = source.sourceIPs;
-    target_name = target.sourceNames;
-    target_ip = target.sourceIPs;
-    port = flowRelationship.prop("port",true);
-    relation_documentation = flowRelationship.concept.documentation;
 
-    var relation_name_str = Array.isArray(relation_name) ? relation_name.join('\n') : relation_name;
-    var source_name_str = Array.isArray(source_name) ? source_name.join('\n') : source_name;
-    var source_ip_str = Array.isArray(source_ip) ? source_ip.join('\n') : source_ip;
-    var target_name_str = Array.isArray(target_name) ? target_name.join('\n') : target_name;
-    var target_ip_str = Array.isArray(target_ip) ? target_ip.join('\n') : target_ip;
-    var port_str = Array.isArray(port) ? port.join('\n') : port;
-    var relation_documentation_str = relation_documentation;
+    var relation_name_str = cleanAndJoin(flowRelationship.concept.name);
+    var source_name_str = cleanAndJoin(source.sourceNames);
+    var source_ip_str = cleanAndJoin(source.sourceIPs);
+    var target_name_str = cleanAndJoin(target.sourceNames);
+    var target_ip_str = cleanAndJoin(target.sourceIPs);
+    var port_str = cleanAndJoin(flowRelationship.prop("port", true));
+    var relation_documentation_str = cleanAndJoin(flowRelationship.concept.documentation);
+
 
     // Utilisez les variables *_str pour définir les valeurs dans Excel
     excel.set(0, 0, current_row, relation_name_str);
@@ -220,11 +259,50 @@ flowRelationship.each(function(flowRelationship) { // Note: 'node' is a Visual O
     excel.set(0, 5, current_row, port_str);
     excel.set(0, 6, current_row, relation_documentation_str);        
 
-    current_row++;
-
-}
+    current_row++;}
 );
 
+
+uniqueObject.forEach(function(object) {
+    var objectParts = object.split("_").map(cleanString); // Nettoie chaque partie après la division
+    excel.set(1, 0, current_row_object, "");
+    excel.set(1, 1, current_row_object, objectParts[0]); // Nom du serveur
+    excel.set(1, 2, current_row_object, objectParts[1]); // Adresse IP
+    excel.set(1, 3, current_row_object, objectParts[2]); // Type de noeud
+    current_row_object++;
+});
+
+
+current_row = 1;
+
+flowRelationship.each(function(flowRelationship) {
+    // Récupère les ports en assumant que flowRelationship.prop("port", true)
+    // retourne un tableau de ports pour cette relation
+    var ports = flowRelationship.prop("port", true);
+
+    // Ajoute chaque port au Set uniquePorts pour filtrer les valeurs uniques
+    ports.forEach(function(port) {
+        uniquePorts.add(port);
+    });
+});
+
+// Après avoir collecté tous les ports uniques, itère sur le Set uniquePorts
+uniquePorts.forEach(function(port) {
+    // Séparation et nettoyage des parties du port
+    var parts = port.split("_").map(cleanString);
+    var portNumber = parts[0];
+    var protocol = parts[1];
+
+    // Utiliser le serviceMap pour trouver le service correspondant ou retourner 'Unknown'
+    var serviceName = serviceMap[protocol] || 'Unknown';
+
+    // Écrire les données nettoyées et le service dans Excel
+    excel.set(2, 0, current_row, portNumber);
+    excel.set(2, 1, current_row, protocol);
+    excel.set(2, 2, current_row, serviceName);
+    excel.set(2, 3, current_row, port);
+    current_row++;
+});
 
 excel.generate(exportFile);
 console.log("> Export done");
