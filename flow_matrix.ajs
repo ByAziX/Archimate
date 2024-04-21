@@ -73,7 +73,7 @@ load(__DIR__ + "lib/myexcel.js");
 var excel = $JExcel.new("Calibri 12 #333333");
 
 
-var sheet2 = excel.addSheet('Objets');
+var sheet2 = excel.addSheet('Objects');
 var sheet3 = excel.addSheet('Ports');
 
 // Set up some headers
@@ -123,6 +123,7 @@ function handleFlow(sourceId) {
     var sourceIPs = [];
     var sourceNames = [];
     var NodeFromGroup = [];
+    var sourceNames_tab = [];
 
 
     print("sourceType: "+sourceType);
@@ -132,10 +133,20 @@ function handleFlow(sourceId) {
         case "technology-interface":
 
             sourceIPs = $("#"+sourceId).attr('name'); // get ip of the source
-            sourceNames = get_node_name_from_interface($("#"+sourceId)[0].concept.id);
+            sourceNames_tab = get_node_name_from_interface($("#"+sourceId)[0].concept.id);
 
-            console.log(sourceNames+"_"+sourceIPs+'_node')
-            uniqueObject.add(sourceName+"_"+sourceIPs+'_node');
+            for (var i = 0; i < sourceNames_tab.length; i++) {
+                if (get_interface_ip_from_node(sourceNames_tab[i].attr('id')).length > 1){
+                    console.log("Multiple IP for the same node")
+                    sourceNames.push(sourceNames_tab[i].attr('name')+"-"+sourceIPs);
+                }else{
+                    sourceNames.push(sourceNames_tab[i].attr('name'));
+                }
+            }
+
+            console.log(sourceNames+"_"+sourceIPs+'_Host')
+            uniqueObject.add(sourceNames+"_"+sourceIPs+'_Host');
+            
             
 
             break;
@@ -144,31 +155,49 @@ function handleFlow(sourceId) {
             NodeFromGroup.push(get_node_from_group($("#"+sourceId)[0].concept.id));            
             NodeFromGroup.forEach(function(nodes){
                 nodes.forEach(function(node){
-                    sourceNames.push(node.attr('name'));
-                    sourceIPs.push(get_interface_ip_from_node(node.attr('id')));
+                    
+                    
+
+                    get_interface_ip_from_node(node.attr('id')).forEach(function(ip){
+                        if (get_interface_ip_from_node(node.attr('id')).length > 1){
+                            console.log("Multiple IP from node for the same node")
+                            sourceNames.push(node.attr('name')+"-"+ip);
+                            uniqueObject.add(node.attr('name')+"-"+ip+"_"+ip+'_Host');
+
+                        }else{
+                            sourceNames.push(node.attr('name'));
+                            uniqueObject.add(node.attr('name')+"_"+ip+'_Host');
+
+                        }
+                        sourceIPs.push(ip);
+                        console.log(sourceNames+"_"+ip+'_Host')
+
+                    });
+       
                 });
             });
 
 
-            // add the name_ip_type to the uniqueObject
-            sourceNames.forEach(function(name){
-                sourceIPs.forEach(function(ip){
-                    console.log(name+"_"+ip+'_node')
-                    uniqueObject.add(name+"_"+ip+'_node');
-                });
-            });
-
+            
             
 
             break;
         case "node":
-            sourceNames.push($("#"+sourceId).attr('name'));
             sourceIPs = get_interface_ip_from_node($("#"+sourceId)[0].concept.id);
 
             sourceIPs.forEach(function(ip){
-                console.log(sourceNames+"_"+ip+'_node')
+                if (sourceIPs.length > 1){
+                    console.log("Multiple IP from node for the same node")
+                    sourceNames.push($("#"+sourceId).attr('name')+"-"+ip);
+                    uniqueObject.add($("#"+sourceId).attr('name')+"-"+ip+"_"+ip+'_Host');
 
-                uniqueObject.add(sourceNames+"_"+ip+'_node');
+                }else{
+                    sourceNames.push($("#"+sourceId).attr('name'));
+                    uniqueObject.add(sourceNames+"_"+ip+'_Host');
+
+                }
+                console.log(sourceNames+"_"+ip+'_Host')
+
             });
 
             break;
@@ -189,7 +218,7 @@ function get_node_name_from_interface(interface_id){
     
     compositionRelationship.each(function(compositionRelationship) { // get all composition-relationship
         if (compositionRelationship.concept.target.id == interface_id && $("#"+compositionRelationship.concept.source.id).attr("type") == "node") { // if target of the composition-relationship is the source of the flow-relationship
-            node_name.push($("#"+compositionRelationship.concept.source.id).attr('name'));
+            node_name.push($("#"+compositionRelationship.concept.source.id));
         }       
     }
     );    
@@ -265,6 +294,7 @@ flowRelationship.each(function(flowRelationship) { // Note: 'node' is a Visual O
 
 uniqueObject.forEach(function(object) {
     var objectParts = object.split("_").map(cleanString); // Nettoie chaque partie après la division
+    console.log(object);
     excel.set(1, 0, current_row_object, "");
     excel.set(1, 1, current_row_object, objectParts[0]); // Nom du serveur
     excel.set(1, 2, current_row_object, objectParts[1]); // Adresse IP
