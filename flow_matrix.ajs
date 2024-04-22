@@ -47,13 +47,9 @@ var compositionRelationship = $(view).find("composition-relationship"); // Build
 var aggregationRelationship = $(view).find("aggregation-relationship"); // Build a collection containing the aggregation-relationship, and then get all flow-relationship in this view.
 var defaultFileName = model.name ? model.name + ".xlsx" : "Exported Model.xlsx"; // Default file name
 var exportFile = window.promptSaveFile({ title: "Export to Excel", filterExtensions: [ "*.xlsx" ], fileName: defaultFileName } );
-let current_row = 1;
-let current_row_fw = 1;
-let current_row_object = 1;
-let current_row_port = 1;
-
-uniqueObject = new Set(); // Initialise un Set vide pour collecter les object uniques
-uniquePorts = new Set(); // Initialise un Set vide pour collecter les ports uniques
+let current_row = 1, current_row_object = 1, current_row_port = 1, current_row_fw = 1;
+let uniqueObject = new Set(); // Initialise un Set vide pour collecter les object uniques
+let uniquePorts = new Set(); // Initialise un Set vide pour collecter les ports uniques
 if(exportFile == null) {
     console.log("> Export cancelled");
     exit();
@@ -86,20 +82,14 @@ function setHeaders() {
 setHeaders();
 
 function handleFlow(element) {
-    
-    var elementType = element.attr('type');
-    var elementName = element.attr('name');
     var IPs = [];
     var Names = [];
     var NodeFromGroup = [];
-    var Names_tab = [];
-    print("elementType: "+elementType);
-    print("elementName: "+elementName);
 
-    switch (elementType) {
+    switch (element.attr('type')) {
         case "technology-interface":
             IPs = element.attr('name');
-            Names_tab = get_element_from_relation(compositionRelationship,"target", "node", element[0].concept.id, "source");
+            let Names_tab = get_element_from_relation(compositionRelationship,"target", "node", element[0].concept.id, "source");
             if (Names_tab.length == 0){
                 // VIP or LB
                 Names.push(IPs.split("=")[0]);
@@ -207,7 +197,7 @@ flowRelationship.each(function(flowRelationship) {
     ];
     populateExcelRow(0, 0, current_row, rowData);
     current_row++;
-
+    // Ajoute les règles de pare-feu à une feuille distincte
     if (flowRelationship.prop("FW", false) == "true") {
         populateExcelRow(3, 0, current_row_fw, rowData);
         current_row_fw++;
