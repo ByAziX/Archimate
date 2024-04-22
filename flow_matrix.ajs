@@ -128,8 +128,7 @@ function handleFlow(sourceId) {
     switch (sourceType) {
         case "technology-interface":
 
-            sourceIPs = sourceId.attr('name'); // get ip of the source
-            //sourceNames_tab = get_node_name_from_interface(sourceId[0].concept.id);
+            sourceIPs = sourceId.attr('name');
             sourceNames_tab = get_element_from_relation(compositionRelationship,"target", "node", sourceId[0].concept.id, "source");
 
             if (sourceNames_tab.length == 0){
@@ -140,7 +139,7 @@ function handleFlow(sourceId) {
 
             }else{
                 for (var i = 0; i < sourceNames_tab.length; i++) {
-                    if (get_interface_ip_from_node(sourceNames_tab[i].attr('id')).length > 1){
+                    if (get_element_from_relation(compositionRelationship,"source", "technology-interface", sourceNames_tab[i].attr('id'), "target").length > 1){
                         console.log("Multiple IP for the same node")
                         sourceNames.push(sourceNames_tab[i].attr('name')+"-"+sourceIPs);
                     }else{
@@ -158,19 +157,25 @@ function handleFlow(sourceId) {
             break;
         case "grouping":
 
-            //NodeFromGroup.push(get_node_from_group(sourceId[0].concept.id));   
             NodeFromGroup.push(get_element_from_relation(aggregationRelationship,"source", "node", sourceId[0].concept.id, "target"));         
             NodeFromGroup.forEach(function(nodes){
                 nodes.forEach(function(node){
                     target = handleFlow(node) 
-                    sourceIPs = target.sourceIPs;
-                    sourceNames = target.sourceNames;
+                    for (var i = 0; i < target.sourceNames.length; i++) {
+                        sourceNames.push(target.sourceNames[i]);
+                        sourceIPs.push(target.sourceIPs[i]);
+                    }
                 });
             });
 
             break;
         case "node":
-            sourceIPs = get_interface_ip_from_node(sourceId[0].concept.id);
+            
+            sourceIds = get_element_from_relation(compositionRelationship,"source", "technology-interface", sourceId[0].concept.id, "target");
+            
+            for (var i = 0; i < sourceIds.length; i++) {
+                sourceIPs.push(sourceIds[i].attr('name'));
+            }
 
             sourceIPs.forEach(function(ip){
                 if (sourceIPs.length > 1){
@@ -195,20 +200,6 @@ function handleFlow(sourceId) {
     return { sourceNames, sourceIPs };
 }
 
-/*
-function get_node_name_from_interface(interface_id){
-    var node_name = [];
-    
-    compositionRelationship.each(function(compositionRelationship) { // get all composition-relationship
-        if (compositionRelationship.concept.target.id == interface_id && $("#"+compositionRelationship.concept.source.id).attr("type") == "node") { // if target of the composition-relationship is the source of the flow-relationship
-            node_name.push($("#"+compositionRelationship.concept.source.id));
-        }       
-    }
-    );    
-    return node_name;
-}*/
-
-
 
 function get_element_from_relation(relation_type,relation_check, element_type, element_check, element_return){
     var element = [];
@@ -220,31 +211,6 @@ function get_element_from_relation(relation_type,relation_check, element_type, e
     );    
     return element;
 }
-
-function get_interface_ip_from_node(node_id){
-    var interface_ip = [];
-    compositionRelationship.each(function(compositionRelationship) { // get all composition-relationship
-        if (compositionRelationship.concept.source.id == node_id) { // if target of the composition-relationship is the source of the flow-relationship
-            interface_ip.push($("#"+compositionRelationship.concept.target.id).attr('name'));
-        }       
-    }
-    );    
-    return interface_ip;
-}
-
-/*
-function get_node_from_group(group_id){
-    var node = [];
-    aggregationRelationship.each(function(aggregationRelationship) { // get all composition-relationship
-        if (aggregationRelationship.concept.source.id == group_id) { // if target of the composition-relationship is the source of the flow-relationship
-            if ($("#"+aggregationRelationship.concept.target.id).attr('type') == "node"){
-                node.push($("#"+aggregationRelationship.concept.target.id));
-            }
-        }       
-    }
-    );    
-    return node;    
-}*/
 
 function cleanAndJoin(input) {
     if (Array.isArray(input)) {
