@@ -139,6 +139,14 @@ function handleFlow(element) {
             });
             
             break;
+        case "communication-network":
+            Names.push(element.attr('name'));
+            IPs = element.prop("Network", true);
+            IPs.forEach(function(ip){
+                uniqueObject.add(Names+"_"+ip+'_Network');
+            });
+
+            break;
         default:
             console.log("Unhandled source type: " + sourceType);
             break;
