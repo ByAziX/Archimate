@@ -17,7 +17,6 @@
  * 
  */
 
-
 const serviceMap = {
     '443': 'HTTPS',
     '80': 'HTTP',
@@ -130,7 +129,9 @@ function handleFlow(sourceId) {
         case "technology-interface":
 
             sourceIPs = sourceId.attr('name'); // get ip of the source
-            sourceNames_tab = get_node_name_from_interface(sourceId[0].concept.id);
+            //sourceNames_tab = get_node_name_from_interface(sourceId[0].concept.id);
+            sourceNames_tab = get_element_from_relation(compositionRelationship,"target", "node", sourceId[0].concept.id, "source");
+
             if (sourceNames_tab.length == 0){
                 console.log("VIP or LB")
                 sourceNames.push(sourceIPs.split("=")[0]);
@@ -143,7 +144,7 @@ function handleFlow(sourceId) {
                         console.log("Multiple IP for the same node")
                         sourceNames.push(sourceNames_tab[i].attr('name')+"-"+sourceIPs);
                     }else{
-                            sourceNames.push(sourceNames_tab[i].attr('name'));
+                        sourceNames.push(sourceNames_tab[i].attr('name'));
                     
                     }
                 }
@@ -157,7 +158,8 @@ function handleFlow(sourceId) {
             break;
         case "grouping":
 
-            NodeFromGroup.push(get_node_from_group(sourceId[0].concept.id));            
+            //NodeFromGroup.push(get_node_from_group(sourceId[0].concept.id));   
+            NodeFromGroup.push(get_element_from_relation(aggregationRelationship,"source", "node", sourceId[0].concept.id, "target"));         
             NodeFromGroup.forEach(function(nodes){
                 nodes.forEach(function(node){
                     target = handleFlow(node) 
@@ -179,7 +181,6 @@ function handleFlow(sourceId) {
                 }else{
                     sourceNames.push(sourceId.attr('name'));
                     uniqueObject.add(sourceNames+"_"+ip+'_Host');
-
                 }
                 console.log(sourceNames+"_"+ip+'_Host')
 
@@ -194,6 +195,7 @@ function handleFlow(sourceId) {
     return { sourceNames, sourceIPs };
 }
 
+/*
 function get_node_name_from_interface(interface_id){
     var node_name = [];
     
@@ -204,6 +206,19 @@ function get_node_name_from_interface(interface_id){
     }
     );    
     return node_name;
+}*/
+
+
+
+function get_element_from_relation(relation_type,relation_check, element_type, element_check, element_return){
+    var element = [];
+    relation_type.each(function(relation_type) { // get all composition-relationship
+        if (relation_type.concept[relation_check].id == element_check && $("#"+relation_type.concept[element_return].id).attr('type') == element_type) { // if target of the composition-relationship is the source of the flow-relationship
+            element.push($("#"+relation_type.concept[element_return].id));
+        }       
+    }
+    );    
+    return element;
 }
 
 function get_interface_ip_from_node(node_id){
@@ -217,6 +232,7 @@ function get_interface_ip_from_node(node_id){
     return interface_ip;
 }
 
+/*
 function get_node_from_group(group_id){
     var node = [];
     aggregationRelationship.each(function(aggregationRelationship) { // get all composition-relationship
@@ -228,14 +244,13 @@ function get_node_from_group(group_id){
     }
     );    
     return node;    
-}
+}*/
 
 function cleanAndJoin(input) {
     if (Array.isArray(input)) {
-        // S'assure que chaque élément est converti en chaîne avant de le nettoyer
         return input.map(item => String(item).trim()).join('\n');
     }
-    return String(input).trim();  // Convertit en chaîne puis applique trim
+    return String(input).trim();
 }
 
 function cleanString(input) {
@@ -259,7 +274,7 @@ function populateExcelRow(sheet, startColumn, row, data) {
 
 flowRelationship.each(function(flowRelationship) { // Note: 'node' is a Visual Object
     
-    source = handleFlow($("#" +flowRelationship.concept.source.id))
+    source = handleFlow($("#" +flowRelationship.concept["source"].id))
     target = handleFlow($("#" +flowRelationship.concept.target.id))
 
     console.log("\n")
@@ -274,23 +289,15 @@ flowRelationship.each(function(flowRelationship) { // Note: 'node' is a Visual O
         cleanAndJoin(flowRelationship.concept.documentation)
     ];
 
-    // Populate the row in the Excel sheet
     populateExcelRow(0, 0, current_row, rowData);
     current_row++;
 
-    console.log("\n");
-    console.log(flowRelationship.prop("FW", false));
     if (flowRelationship.prop("FW", false) == "true") {
-       
         populateExcelRow(3, 0, current_row_fw, rowData);
-
         current_row_fw++;
-    } else {
-        console.log("propName is false");
     }
 }
 );
-
 
 uniqueObject.forEach(function(object) {
     var objectParts = object.split("_").map(cleanString); // Nettoie chaque partie après la division
