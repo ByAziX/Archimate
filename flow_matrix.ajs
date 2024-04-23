@@ -48,7 +48,7 @@ var aggregationRelationship = $(view).find("aggregation-relationship"); // Build
 var defaultFileName = model.name ? model.name + ".xlsx" : "Exported Model.xlsx"; // Default file name
 var exportFile = window.promptSaveFile({ title: "Export to Excel", filterExtensions: [ "*.xlsx" ], fileName: defaultFileName } );
 let current_row = 1, current_row_object = 1, current_row_port = 1, current_row_fw = 1;
-let uniqueObject = new Set(); // Initialise un Set vide pour collecter les object uniques
+let uniqueObject = new Map();
 let uniquePorts = new Set(); // Initialise un Set vide pour collecter les ports uniques
 if(exportFile == null) {
     console.log("> Export cancelled");
@@ -63,13 +63,13 @@ var excel = $JExcel.new("Calibri 12 #333333");
 var sheet2 = excel.addSheet('Objects');
 var sheet3 = excel.addSheet('Ports');
 var sheet4 = excel.addSheet('FW Rules');
-var formatHeader = { fill: "#dddddd", border: "thin, thin, thin, thin #555555", font: "Arial 12 #000000 B" };
+var formatHeader = excel.addStyle({ border: "none,none,none,thin #333333", font: "Calibri 12 #1B2A41 B", fill: "#f3f3f3" });
 function setHeaders() {
     const headers = {
-        rules: ["RuleName", "Source Name", "Source IP", "Target Name", "Target IP", "Port", "Documentation"],
+        rules: ["Demandeur CDP", "Demandeur Archi", "Type flux", "Prod/HP", "Env.", "In/Out", "Description", "Source Nom", "Source IP", "Destination Nom", "Destination IP", "Proto Nom", "Proto/Port", "Avis SSI", "Commentaire SSI", "Etat", "ID (Nom) de la Règle", "Date implémentation /Révision", "Opérateur"],
         objects: ["Group Name", "Object Name", "IP", "Type"],
         ports: ["Protocol", "Port", "Service Name", "Port Name"],
-        rulesFW: ["RuleName", "Source Name", "Source IP", "Target Name", "Target IP", "Port", "Documentation"]
+        rulesFW: ["Demandeur CDP", "Demandeur Archi", "Type flux", "Prod/HP", "Env.", "In/Out", "Description", "Source Nom", "Source IP", "Destination Nom", "Destination IP", "Proto Nom", "Proto/Port", "Avis SSI", "Commentaire SSI", "Etat", "ID (Nom) de la Règle", "Date implémentation /Révision", "Opérateur"],
     };
 
     Object.entries(headers).forEach(([key, value], index) => {
@@ -80,6 +80,11 @@ function setHeaders() {
     });
 }
 setHeaders();
+
+// permet de créer une clé unique pour chaque objet en fonction de son groupe, nom, ip et type
+function getKeyFromObject(obj) {
+    return `${obj.group}:${obj.name}:${obj.ip}:${obj.type}`;
+}
 
 function handleFlow(element) {
     var IPs = [];
@@ -104,8 +109,9 @@ function handleFlow(element) {
                     }
                 }
             }
-            uniqueObject.add({group:"",name: Names, ip: IPs, type: "Host"});
-            
+            object = {group:"",name: Names, ip: IPs, type: "Host"};
+            uniqueObject.set(getKeyFromObject(object), object);
+
             break;
         case "grouping":
             NodeFromGroup.push(get_element_from_relation(aggregationRelationship,"source", "node", element[0].concept.id, "target"));  
@@ -118,7 +124,6 @@ function handleFlow(element) {
                         for (var i = 0; i < target.Names.length; i++) {
                             Names.push(target.Names[i]);
                             IPs.push(target.IPs[i]);
-                            
                         }
                     }
                     // si le noeud est un groupe, on rappelle la fonction handleFlow pour traiter les noeuds du groupe et les ajouter à la liste le groupe parent et enfant
@@ -128,7 +133,8 @@ function handleFlow(element) {
                         for (var i = 0; i < groupIds.length; i++) {
                             groupName.push(groupIds[i].attr('name'));
                         }
-                        uniqueObject.add({group: groupName,name: node.attr('name'), ip: "", type: "Group"});
+                        object = {group:groupName,name: node.attr('name'), ip: "", type: "Group"};
+                        uniqueObject.set(getKeyFromObject(object), object);
                         handleFlow(node);
                     }
                 });
@@ -154,11 +160,13 @@ function handleFlow(element) {
                 if (IPs.length > 1){
                     // Multiple IP from node for the same node
                     Names.push(element.attr('name')+"-"+ip);
-                    uniqueObject.add({group:groupName,name: element.attr('name')+"-"+ip, ip: ip, type: "Host"});
+                    object = {group:groupName,name: element.attr('name')+"-"+ip, ip: ip, type: "Host"};
+                    uniqueObject.set(getKeyFromObject(object), object);
 
                 }else{
                     Names.push(element.attr('name'));
-                    uniqueObject.add({group:groupName,name: element.attr('name'), ip: ip, type: "Host"});
+                    object = {group:groupName,name: element.attr('name'), ip: ip, type: "Host"};
+                    uniqueObject.set(getKeyFromObject(object), object);
                 }
             });
             
@@ -167,7 +175,8 @@ function handleFlow(element) {
             Names.push(element.attr('name'));
             IPs = element.prop("Network", true);
             IPs.forEach(function(ip){
-                uniqueObject.add({group:"",name: Names, ip: ip, type: "Network"});
+                object = {group:"",name: Names, ip: ip, type: "Network"};
+                uniqueObject.set(getKeyFromObject(object), object);
             });
 
             break;
@@ -214,14 +223,32 @@ flowRelationship.each(function(flowRelationship) {
     source = handleFlow($("#" +flowRelationship.concept["source"].id))
     target = handleFlow($("#" +flowRelationship.concept.target.id))
 
+    let serviceName = []
+    flowRelationship.prop("port", true).forEach(function(port) {
+        let parts = port.split("/").map(cleanAndJoin);
+        serviceName.push(serviceMap[parts[1]] || 'Unknown');
+    });
+
     const rowData = [
-        cleanAndJoin(flowRelationship.concept.name),
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        cleanAndJoin(flowRelationship.concept.documentation),
         cleanAndJoin(source.Names),
         cleanAndJoin(source.IPs),
         cleanAndJoin(target.Names),
         cleanAndJoin(target.IPs),
+        cleanAndJoin(serviceName),
         cleanAndJoin(flowRelationship.prop("port", true)),
-        cleanAndJoin(flowRelationship.concept.documentation)
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
     ];
     populateExcelRow(0, 0, current_row, rowData);
     current_row++;
@@ -242,10 +269,11 @@ function prepareAndPopulateData(item, type, rowStart) {
     let rowData;
     
     if (type === 'object') {
+        // get map value
         rowData = [cleanAndJoin(item.group), cleanAndJoin(item.name),cleanAndJoin(item.ip),cleanAndJoin(item.type)];
 
     } else if (type === 'port') {
-        let parts = item.split("_").map(cleanAndJoin);
+        let parts = item.split("/").map(cleanAndJoin);
 
         let serviceName = serviceMap[parts[1]] || 'Unknown';
         rowData = [parts[0], parts[1], serviceName, item];
@@ -266,5 +294,3 @@ excel.generate(exportFile);
 console.log("> Export done");
 
 
-excel.generate(exportFile);
-console.log("> Export done");
