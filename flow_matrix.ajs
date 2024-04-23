@@ -104,37 +104,61 @@ function handleFlow(element) {
                     }
                 }
             }
-            uniqueObject.add(Names+"_"+IPs+'_Host');
+            uniqueObject.add({group:"",name: Names, ip: IPs, type: "Host"});
             
             break;
         case "grouping":
-            NodeFromGroup.push(get_element_from_relation(aggregationRelationship,"source", "node", element[0].concept.id, "target"));         
+            NodeFromGroup.push(get_element_from_relation(aggregationRelationship,"source", "node", element[0].concept.id, "target"));  
+            NodeFromGroup.push(get_element_from_relation(compositionRelationship,"source", "grouping", element[0].concept.id, "target"));
+
             NodeFromGroup.forEach(function(nodes){
                 nodes.forEach(function(node){
-                    let target = handleFlow(node) 
-                    for (var i = 0; i < target.Names.length; i++) {
-                        Names.push(target.Names[i]);
-                        IPs.push(target.IPs[i]);
+                    if (node.attr('type') == "node"){
+                        let target = handleFlow(node) 
+                        for (var i = 0; i < target.Names.length; i++) {
+                            Names.push(target.Names[i]);
+                            IPs.push(target.IPs[i]);
+                            
+                        }
+                    }
+                    // si le noeud est un groupe, on rappelle la fonction handleFlow pour traiter les noeuds du groupe et les ajouter à la liste le groupe parent et enfant
+                    else if (node.attr('type') == "grouping"){
+                        let groupName = [];
+                        let groupIds = get_element_from_relation(compositionRelationship,"target", "grouping", node[0].concept.id, "source");
+                        for (var i = 0; i < groupIds.length; i++) {
+                            groupName.push(groupIds[i].attr('name'));
+                        }
+                        uniqueObject.add({group: groupName,name: node.attr('name'), ip: "", type: "Group"});
+                        handleFlow(node);
                     }
                 });
             });
 
             break;
         case "node": 
+
+            // regarder si le noeud à plusieurs IP et les ajouter à la liste
             let sourceIds = get_element_from_relation(compositionRelationship,"source", "technology-interface", element[0].concept.id, "target");
             for (var i = 0; i < sourceIds.length; i++) {
                 IPs.push(sourceIds[i].attr('name'));
+            }
+            
+            // regarder si le noeud est dans un groupe et ajouter le nom du groupe à la liste
+            let groupName = [];
+            let groupIds = get_element_from_relation(aggregationRelationship,"target", "grouping", element[0].concept.id, "source");
+            for (var i = 0; i < groupIds.length; i++) {
+                groupName.push(groupIds[i].attr('name'));
             }
 
             IPs.forEach(function(ip){
                 if (IPs.length > 1){
                     // Multiple IP from node for the same node
                     Names.push(element.attr('name')+"-"+ip);
-                    uniqueObject.add(element.attr('name')+"-"+ip+"_"+ip+'_Host');
+                    uniqueObject.add({group:groupName,name: element.attr('name')+"-"+ip, ip: ip, type: "Host"});
 
                 }else{
                     Names.push(element.attr('name'));
-                    uniqueObject.add(Names+"_"+ip+'_Host');
+                    uniqueObject.add({group:groupName,name: element.attr('name'), ip: ip, type: "Host"});
                 }
             });
             
@@ -143,7 +167,7 @@ function handleFlow(element) {
             Names.push(element.attr('name'));
             IPs = element.prop("Network", true);
             IPs.forEach(function(ip){
-                uniqueObject.add(Names+"_"+ip+'_Network');
+                uniqueObject.add({group:"",name: Names, ip: ip, type: "Network"});
             });
 
             break;
@@ -160,7 +184,7 @@ function get_element_from_relation(relation_type,relation_check, element_type, e
         if (relation_type.concept[relation_check].id == element_check && $("#"+relation_type.concept[element_return].id).attr('type') == element_type) { // if target of the composition-relationship is the source of the flow-relationship
             element.push($("#"+relation_type.concept[element_return].id));
         }       
-    });    
+    }); 
     return element;
 }
 
@@ -169,10 +193,6 @@ function cleanAndJoin(input) {
         return input.map(item => String(item).trim()).join('\n');
     }
     return String(input).trim();
-}
-
-function cleanString(input) {
-    return input.trim();
 }
 
 function addElementInExcel(sheet, column, row, value, style = null) {
@@ -219,12 +239,14 @@ flowRelationship.each(function(flowRelationship) {
 
 // Prepare and populate data OBJECTS and PORTS
 function prepareAndPopulateData(item, type, rowStart) {
-    let parts = item.split("_").map(cleanString);
     let rowData;
     
     if (type === 'object') {
-        rowData = ["", ...parts];
+        rowData = [cleanAndJoin(item.group), cleanAndJoin(item.name),cleanAndJoin(item.ip),cleanAndJoin(item.type)];
+
     } else if (type === 'port') {
+        let parts = item.split("_").map(cleanAndJoin);
+
         let serviceName = serviceMap[parts[1]] || 'Unknown';
         rowData = [parts[0], parts[1], serviceName, item];
     }
@@ -239,6 +261,10 @@ uniqueObject.forEach(object => {
 uniquePorts.forEach(port => {
     prepareAndPopulateData(port, 'port', current_row_port++);
 });
+
+excel.generate(exportFile);
+console.log("> Export done");
+
 
 excel.generate(exportFile);
 console.log("> Export done");
