@@ -263,18 +263,18 @@ function processFlowRelationship(flowRelationship) {
 
 }
 
-// Process each flow relationship
-flowRelationship.each(function (flowRelationship) {
-    const rowData = processFlowRelationship(flowRelationship);
+function processAllFlowRelationships(sheet,flowRelationships, checkFW) {
+    flowRelationships.each(flowRelationship => {
+        if (!checkFW || flowRelationship.prop("FW", false) === "true") {
+            const rowData = processFlowRelationship(flowRelationship);
+            populateExcelRow(sheet, 0, currentRow++, rowData);
+            flowRelationship.prop("port", true).forEach(port => uniquePorts.add(port));
+        }
+    });
+}
 
-    // Populate the main Excel sheet
-    populateExcelRow(0, 0, currentRow, rowData);
-    currentRow++;
-
-    // Add unique ports
-    flowRelationship.prop("port", true).forEach(port => uniquePorts.add(port));
-
-});
+// Processing all relationships without the 'FW' check
+processAllFlowRelationships(0,flowRelationship, false);
 
 // Populate data for unique objects and ports in dedicated sheets
 uniqueObject.forEach((object, index) => {
@@ -285,28 +285,12 @@ uniquePorts.forEach((port, index) => {
     prepareAndPopulateData(2, port, 'port', currentRowPort++);
 });
 
-
-currentRow = 1;
-currentRowObject = 1;
-currentRowPort = 1;
+currentRow = 1, currentRowObject = 1, currentRowPort = 1;
 uniqueObject = new Map();
 uniquePorts = new Set(); // Initialise un Set vide pour collecter les ports uniques
 
-// Process each flow relationship
-flowRelationship.each(function(flowRelationship) {
-    if (flowRelationship.prop("FW", false) == "true") {
-
-        const rowData = processFlowRelationship(flowRelationship);
-
-        // Populate the main Excel sheet
-        populateExcelRow(3, 0, currentRow, rowData);
-        currentRow++;
-    
-        // Add unique ports
-        flowRelationship.prop("port", true).forEach(port => uniquePorts.add(port));
-
-    }
-});
+// Processing only those with 'FW' set to 'true'
+processAllFlowRelationships(3,flowRelationship, true);
 
 // Populate data for unique objects and ports in dedicated sheets
 uniqueObject.forEach((object, index) => {
@@ -317,7 +301,5 @@ uniquePorts.forEach((port, index) => {
     prepareAndPopulateData(5, port, 'port', currentRowPort++);
 });
 
-
 excel.generate(exportFile);
 console.log("> Export done");
-
