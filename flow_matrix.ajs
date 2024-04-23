@@ -16,7 +16,6 @@
  *  - You can't use this script for commercial purposes unless you obtained it from the official Archi distribution channels.
  * 
  */
-
 const serviceMap = {
     '443': 'HTTPS',
     '80': 'HTTP',
@@ -241,11 +240,8 @@ function prepareAndPopulateData(sheet,item, type, rowStart) {
 
 // Helper function to process and retrieve data from flow relationships
 function processFlowRelationship(flowRelationship) {
-    const sourceId = flowRelationship.concept.source.id;
-    const targetId = flowRelationship.concept.target.id;
-    
-    const source = handleFlow($("#" + sourceId));
-    const target = handleFlow($("#" + targetId));
+    const source = handleFlow($("#" + flowRelationship.concept.source.id));
+    const target = handleFlow($("#" + flowRelationship.concept.target.id));
     
     const ports = flowRelationship.prop("port", true);
     const serviceName = ports.map(port => {
@@ -253,13 +249,8 @@ function processFlowRelationship(flowRelationship) {
         return serviceMap[parts[1]] || 'Unknown';
     });
 
-    const rowData = [
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
+    return rowData = [
+        ...new Array(6).fill(""),
         cleanAndJoin(flowRelationship.concept.documentation),
         cleanAndJoin(source.names_tab),
         cleanAndJoin(source.ip_tab),
@@ -267,15 +258,9 @@ function processFlowRelationship(flowRelationship) {
         cleanAndJoin(target.ip_tab),
         cleanAndJoin(serviceName),
         cleanAndJoin(ports),
-        "",
-        "",
-        "",
-        "",
-        "",
-        ""
+        ...new Array(9).fill(""),
     ];
 
-    return rowData;
 }
 
 // Process each flow relationship
