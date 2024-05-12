@@ -73,11 +73,12 @@ let currentRow = 1, currentRowObject = 1, currentRowPort = 1;
 let uniqueObject = new Map();
 let uniquePorts = new Set(); // Initialise un Set vide pour collecter les ports uniques
 let uniqueIP = new Set(); // Initialise un Set vide pour collecter les IP uniques
+let ip_set = new Set();
+
 if(exportFile == null) {
     console.log("> Export cancelled");
     exit();
 }
-let ip_set = new Set();
 
 console.log("> Starting Excel Export");
 function createSheetsAndHeaders(excel, sheetNames, headers, defaultStyle) {
@@ -123,7 +124,7 @@ function handleFlow(element) {
     switch (element.attr('type')) {
         case "technology-interface":
             ip_from_interface = element.prop("IP address", false);
-            let check_name_from_node = getElementsFromRelationship(compositionRelationship,"target", "node", element[0].concept.id, "source");
+            let check_name_from_node = getElementsFromRelationship([compositionRelationship,aggregationRelationship],"target", "node", element[0].concept.id, "source");
             if (check_name_from_node.length == 0){
                 // VIP or LB
                 name_from_node.push(element.prop("Name", false));
@@ -131,9 +132,8 @@ function handleFlow(element) {
                 
             }else{
                 for (var i = 0; i < check_name_from_node.length; i++) {
-
-                    if (getElementsFromRelationship(compositionRelationship,"source", "technology-interface", check_name_from_node[i].attr('id'), "target").length > 1){
-                        // Multiple IP for the same node
+                    if (getElementsFromRelationship([compositionRelationship,aggregationRelationship],"source", "technology-interface", check_name_from_node[i].attr('id'), "target").length > 1){
+                        // Multiple IP for the same node, node is unique in fw rules so we add the IP to the name
                         name_from_node.push(check_name_from_node[i].attr('name')+"-"+ip_from_interface);
                     }else{
                         name_from_node.push(check_name_from_node[i].attr('name'));       
@@ -147,8 +147,7 @@ function handleFlow(element) {
         case "grouping":
             console.log("Parents "+element[0].concept.name);
 
-            node_from_group.push(getElementsFromRelationship(aggregationRelationship,"source", "node", element[0].concept.id, "target"));  
-
+            node_from_group.push(getElementsFromRelationship([aggregationRelationship,compositionRelationship],"source", "node", element[0].concept.id, "target"));  
             node_from_group.forEach(function(nodes){
                 nodes.forEach(function(node){
                     if (node.attr('type') == "node"){
@@ -162,13 +161,13 @@ function handleFlow(element) {
                 });
             });
             
-            group_from_group.push(getElementsFromRelationship(compositionRelationship,"source", "grouping", element[0].concept.id, "target"))
+            group_from_group.push(getElementsFromRelationship([compositionRelationship,aggregationRelationship],"source", "grouping", element[0].concept.id, "target"))
             group_from_group.forEach(function(groups){
                 groups.forEach(function(group){
                     if (group.attr('type') == "grouping"){
                         console.log("Enfant "+group.attr('name'));
 
-                        let groupIds = getElementsFromRelationship(compositionRelationship,"target", "grouping", group[0].concept.id, "source");
+                        let groupIds = getElementsFromRelationship([compositionRelationship,aggregationRelationship],"target", "grouping", group[0].concept.id, "source");
                         for (var i = 0; i < groupIds.length; i++) {
                             name_from_group.push(groupIds[i].attr('name'));
                         }
@@ -188,14 +187,13 @@ function handleFlow(element) {
             break;
         case "node": 
             // regarder si le noeud à plusieurs IP et les ajouter à la liste
-            let sourceIds = getElementsFromRelationship(compositionRelationship,"source", "technology-interface", element[0].concept.id, "target");
-
+            let sourceIds = getElementsFromRelationship([compositionRelationship,aggregationRelationship],"source", "technology-interface", element[0].concept.id, "target");
             for (var i = 0; i < sourceIds.length; i++) {
                 ip_from_interface.push(sourceIds[i].attr("name"));
             }
 
             // regarder si le noeud est dans un groupe et ajouter le nom du groupe à la liste
-            let groupIds = getElementsFromRelationship(aggregationRelationship,"target", "grouping", element[0].concept.id, "source");
+            let groupIds = getElementsFromRelationship([aggregationRelationship,aggregationRelationship],"target", "grouping", element[0].concept.id, "source");
             for (var i = 0; i < groupIds.length; i++) {
                 name_from_group.push(groupIds[i].attr('name'));
             }
@@ -235,13 +233,18 @@ function handleFlow(element) {
     return { name_from_node, ip_from_interface };
 }
 
-function getElementsFromRelationship(relation_type,relation_check, element_type, element_check, element_return){
+function getElementsFromRelationship(relation_types,relation_check, element_type, element_check, element_return){
     var element = [];
-    relation_type.each(function(relation_type) {
-        if (relation_type.concept[relation_check].id == element_check && $("#"+relation_type.concept[element_return].id).attr('type') == element_type) { // if target of the composition-relationship is the source of the flow-relationship
-            element.push($("#"+relation_type.concept[element_return].id));
-        }       
-    }); 
+    relation_types.forEach(function(relation_type) {
+        
+        relation_type.forEach(function(relation) {
+            if (relation.concept[relation_check].id == element_check && $("#"+relation.concept[element_return].id).attr('type') == element_type) { // if target of the composition-relationship is the source of the flow-relationship
+                element.push($("#"+relation.concept[element_return].id));
+            }       
+        }); 
+
+    });
+
     return element;
 }
 
@@ -319,7 +322,6 @@ function processAllFlowRelationships(sheet,flowRelationships, checkFW) {
 }
 
 // MAIN
-
 const excel = $JExcel.new();
 excel.removeSheet("Sheet 0");
 const sheets = createSheetsAndHeaders(excel, SHEET_NAMES, HEADERS, DEFAULT_STYLE);
