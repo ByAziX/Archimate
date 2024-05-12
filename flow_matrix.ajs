@@ -16,6 +16,7 @@
  *  - You can't use this script for commercial purposes unless you obtained it from the official Archi distribution channels.
  * 
  */
+
 const serviceMap = {
     '443': 'HTTPS',
     '80': 'HTTP',
@@ -30,41 +31,40 @@ const serviceMap = {
     '53': 'DNS',
     '123': 'NTP',
     '161': 'SNMP',
-  };
+};
 
 console.show();
 console.clear();
-console.log("----------GET OBJECT NODE FROM MODEL-!!!!!!!!!!!!!!!!!!!!------------");
 var nodes = $("node");
-//console.log(nodes);
+//var view = $(".5-Prod").first(); // Get view from its name (pick the first one if multiple views share the same name)
+var view = selection.parents().add(selection).filter("view").first();
+console.log("> Exporting view: " + $(view).attr("name"));
 
-console.log("----------GET VIEW-!!!!!!!!!!!!!!!!!!!!------------");
-var view = $(".5-Prod").first(); // Get view from its name (pick the first one if multiple views share the same name)
-console.log($(view).filter("name")) // Get the name of the view
 var flowRelationship = $(view).find("flow-relationship"); // Build a collection containing the view, and then get all flow-relationship in this view.
 var compositionRelationship = $(view).find("composition-relationship"); // Build a collection containing the composition-relationship, and then get all flow-relationship in this view.
 var aggregationRelationship = $(view).find("aggregation-relationship"); // Build a collection containing the aggregation-relationship, and then get all flow-relationship in this view.
-var defaultFileName = model.name ? model.name + ".xlsx" : "Exported Model.xlsx"; // Default file name
+var defaultFileName = model.name+"_"+$(view).attr("name") ? model.name+"_"+$(view).attr("name") + ".xlsx" : "Exported Model.xlsx"; // Default file name
 var exportFile = window.promptSaveFile({ title: "Export to Excel", filterExtensions: [ "*.xlsx" ], fileName: defaultFileName } );
 let currentRow = 1, currentRowObject = 1, currentRowPort = 1;
 let uniqueObject = new Map();
 let uniquePorts = new Set(); // Initialise un Set vide pour collecter les ports uniques
+let uniqueIP = new Set(); // Initialise un Set vide pour collecter les IP uniques
 if(exportFile == null) {
     console.log("> Export cancelled");
     exit();
 }
+let ip_set = new Set();
+
+
 console.log("> Starting Excel Export");
-// Load MyExcel and JSZip JS files
 load(__DIR__ + "lib/jszip-101.js");
 load(__DIR__ + "lib/myexcel.js");
-// Create a new Excel file with a default font and colour
 var excel = $JExcel.new("Calibri 12 #333333");
 var sheet2 = excel.addSheet('Objects');
 var sheet3 = excel.addSheet('Ports');
 var sheet4 = excel.addSheet('FW Rules');
 var sheet5 = excel.addSheet('FW Objects');
 var sheet6 = excel.addSheet('FW Ports');
-
 var formatHeader = excel.addStyle({ border: "none,none,none,thin #333333", font: "Calibri 12 #1B2A41 B", fill: "#f3f3f3" });
 function setHeaders() {
     const headers = {
@@ -94,19 +94,21 @@ function handleFlow(element) {
     let ip_tab = [];
     let names_tab = [];
     let NodeFromGroup = [];
+    let GroupFromGroup = [];
     let groupName = [];
 
     switch (element.attr('type')) {
         case "technology-interface":
-            ip_tab = element.attr('name');
+            ip_tab = element.prop("IP address", false);
             let Names_tab_from_interface = getElementsFromRelationship(compositionRelationship,"target", "node", element[0].concept.id, "source");
             if (Names_tab_from_interface.length == 0){
                 // VIP or LB
-                names_tab.push(ip_tab.split("=")[0]); //names_tab.push(element.prop("Name", false));
-                ip_tab = ip_tab.split("=")[1]; //ip_tab= element.prop("IP address", false);
+                names_tab.push(element.prop("Name", false));
+                ip_tab = element.prop("IP address", false);
                 
             }else{
                 for (var i = 0; i < Names_tab_from_interface.length; i++) {
+
                     if (getElementsFromRelationship(compositionRelationship,"source", "technology-interface", Names_tab_from_interface[i].attr('id'), "target").length > 1){
                         // Multiple IP for the same node
                         names_tab.push(Names_tab_from_interface[i].attr('name')+"-"+ip_tab);
@@ -120,8 +122,9 @@ function handleFlow(element) {
 
             break;
         case "grouping":
+            console.log("Parents "+element[0].concept.name);
+
             NodeFromGroup.push(getElementsFromRelationship(aggregationRelationship,"source", "node", element[0].concept.id, "target"));  
-            NodeFromGroup.push(getElementsFromRelationship(compositionRelationship,"source", "grouping", element[0].concept.id, "target"));
 
             NodeFromGroup.forEach(function(nodes){
                 nodes.forEach(function(node){
@@ -132,26 +135,42 @@ function handleFlow(element) {
                             ip_tab.push(target.ip_tab[i]);
                         }
                     }
-                    // si le noeud est un groupe, on rappelle la fonction handleFlow pour traiter les noeuds du groupe et les ajouter à la liste le groupe parent et enfant
-                    else if (node.attr('type') == "grouping"){
-                        let groupIds = getElementsFromRelationship(compositionRelationship,"target", "grouping", node[0].concept.id, "source");
+
+                });
+            });
+            
+            GroupFromGroup.push(getElementsFromRelationship(compositionRelationship,"source", "grouping", element[0].concept.id, "target"))
+            GroupFromGroup.forEach(function(groups){
+                groups.forEach(function(group){
+                    if (group.attr('type') == "grouping"){
+                        console.log("Enfant "+group.attr('name'));
+
+                        let groupIds = getElementsFromRelationship(compositionRelationship,"target", "grouping", group[0].concept.id, "source");
                         for (var i = 0; i < groupIds.length; i++) {
                             groupName.push(groupIds[i].attr('name'));
                         }
-                        object = {group:groupName,name: node.attr('name'), ip: "", type: "Group"};
+                        object = {group:groupName,name: group.attr('name'), ip: "", type: "Group"};
                         uniqueObject.set(getKeyFromObject(object), object);
-                        handleFlow(node);
+                        let target = handleFlow(group);
+                        for (var i = 0; i < target.names_tab.length; i++) {
+                            names_tab.push(target.names_tab[i]);
+                            ip_tab.push(target.ip_tab[i]);
+                        }
+
                     }
                 });
             });
+
 
             break;
         case "node": 
             // regarder si le noeud à plusieurs IP et les ajouter à la liste
             let sourceIds = getElementsFromRelationship(compositionRelationship,"source", "technology-interface", element[0].concept.id, "target");
+
             for (var i = 0; i < sourceIds.length; i++) {
-                ip_tab.push(sourceIds[i].attr('name'));
+                ip_tab.push(sourceIds[i].attr("name"));
             }
+
             // regarder si le noeud est dans un groupe et ajouter le nom du groupe à la liste
             let groupIds = getElementsFromRelationship(aggregationRelationship,"target", "grouping", element[0].concept.id, "source");
             for (var i = 0; i < groupIds.length; i++) {
@@ -159,6 +178,7 @@ function handleFlow(element) {
             }
 
             ip_tab.forEach(function(ip){
+
                 if (ip_tab.length > 1){
                     // Multiple IP from node for the same node
                     names_tab.push(element.attr('name')+"-"+ip);
@@ -166,9 +186,12 @@ function handleFlow(element) {
                     uniqueObject.set(getKeyFromObject(object), object);
 
                 }else{
-                    names_tab.push(element.attr('name'));
-                    object = {group:groupName,name: element.attr('name'), ip: ip, type: "Host"};
-                    uniqueObject.set(getKeyFromObject(object), object);
+                    // si element.attr('name') pas dans la liste names_tab alors on l'ajoute
+                    if (!names_tab.includes(element.attr('name'))){
+                        names_tab.push(element.attr('name'));
+                        object = {group:groupName,name: element.attr('name'), ip: ip, type: "Host"};
+                        uniqueObject.set(getKeyFromObject(object), object);
+                    }
                 }
             });
             
@@ -242,7 +265,6 @@ function prepareAndPopulateData(sheet,item, type, rowStart) {
 function processFlowRelationship(flowRelationship) {
     const source = handleFlow($("#" + flowRelationship.concept.source.id));
     const target = handleFlow($("#" + flowRelationship.concept.target.id));
-    
     const ports = flowRelationship.prop("port", true);
     const serviceName = ports.map(port => {
         const parts = port.split("/").map(cleanAndJoin);
@@ -285,6 +307,9 @@ uniquePorts.forEach((port, index) => {
     prepareAndPopulateData(2, port, 'port', currentRowPort++);
 });
 
+
+// Processing only those with 'FW' set to 'true' in FW Matrice
+
 currentRow = 1, currentRowObject = 1, currentRowPort = 1;
 uniqueObject = new Map();
 uniquePorts = new Set(); // Initialise un Set vide pour collecter les ports uniques
@@ -301,5 +326,7 @@ uniquePorts.forEach((port, index) => {
     prepareAndPopulateData(5, port, 'port', currentRowPort++);
 });
 
+
 excel.generate(exportFile);
 console.log("> Export done");
+
