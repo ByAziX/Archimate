@@ -17,6 +17,10 @@
  * 
  */
 
+load(__DIR__ + "lib/jszip-101.js");
+load(__DIR__ + "lib/myexcel.js");
+
+
 const serviceMap = {
     '443': 'HTTPS',
     '80': 'HTTP',
@@ -33,13 +37,33 @@ const serviceMap = {
     '161': 'SNMP',
 };
 
+const SHEET_NAMES = {
+    rules: 'Rules',
+    objects: 'Objects',
+    ports: 'Ports',
+    fwRules: 'FW Rules',
+    fwObjects: 'FW Objects',
+    fwPorts: 'FW Ports'
+};
+
+
+const HEADERS = {
+    rules: ["Demandeur CDP", "Demandeur Archi", "Type flux", "Prod/HP", "Env.", "In/Out", "Description", "Source Nom", "Source IP", "Destination Nom", "Destination IP", "Proto Nom", "Proto/Port", "Avis SSI", "Commentaire SSI", "Etat", "ID (Nom) de la Règle", "Date implémentation /Révision", "Opérateur"],
+    objects: ["Group Name", "Object Name", "IP", "Type"],
+    ports: ["Protocol", "Port", "Service Name", "Port Name"],
+    fwRules: ["Demandeur CDP", "Demandeur Archi", "Type flux", "Prod/HP", "Env.", "In/Out", "Description", "Source Nom", "Source IP", "Destination Nom", "Destination IP", "Proto Nom", "Proto/Port", "Avis SSI", "Commentaire SSI", "Etat", "ID (Nom) de la Règle", "Date implémentation /Révision", "Opérateur"],
+    fwObjects: ["Group Name", "Object Name", "IP", "Type"],
+    fwPorts: ["Protocol", "Port", "Service Name", "Port Name"],
+};
+
+const DEFAULT_STYLE = { border: "none,none,none,thin #333333", font: "Calibri 12 #1B2A41 B", fill: "#f3f3f3" };
+
+
 console.show();
 console.clear();
 var nodes = $("node");
-//var view = $(".5-Prod").first(); // Get view from its name (pick the first one if multiple views share the same name)
 var view = selection.parents().add(selection).filter("view").first();
 console.log("> Exporting view: " + $(view).attr("name"));
-
 var flowRelationship = $(view).find("flow-relationship"); // Build a collection containing the view, and then get all flow-relationship in this view.
 var compositionRelationship = $(view).find("composition-relationship"); // Build a collection containing the composition-relationship, and then get all flow-relationship in this view.
 var aggregationRelationship = $(view).find("aggregation-relationship"); // Build a collection containing the aggregation-relationship, and then get all flow-relationship in this view.
@@ -55,35 +79,34 @@ if(exportFile == null) {
 }
 let ip_set = new Set();
 
-
 console.log("> Starting Excel Export");
-load(__DIR__ + "lib/jszip-101.js");
-load(__DIR__ + "lib/myexcel.js");
-var excel = $JExcel.new("Calibri 12 #333333");
-var sheet2 = excel.addSheet('Objects');
-var sheet3 = excel.addSheet('Ports');
-var sheet4 = excel.addSheet('FW Rules');
-var sheet5 = excel.addSheet('FW Objects');
-var sheet6 = excel.addSheet('FW Ports');
-var formatHeader = excel.addStyle({ border: "none,none,none,thin #333333", font: "Calibri 12 #1B2A41 B", fill: "#f3f3f3" });
-function setHeaders() {
-    const headers = {
-        rules: ["Demandeur CDP", "Demandeur Archi", "Type flux", "Prod/HP", "Env.", "In/Out", "Description", "Source Nom", "Source IP", "Destination Nom", "Destination IP", "Proto Nom", "Proto/Port", "Avis SSI", "Commentaire SSI", "Etat", "ID (Nom) de la Règle", "Date implémentation /Révision", "Opérateur"],
-        objects: ["Group Name", "Object Name", "IP", "Type"],
-        ports: ["Protocol", "Port", "Service Name", "Port Name"],
-        rulesFW: ["Demandeur CDP", "Demandeur Archi", "Type flux", "Prod/HP", "Env.", "In/Out", "Description", "Source Nom", "Source IP", "Destination Nom", "Destination IP", "Proto Nom", "Proto/Port", "Avis SSI", "Commentaire SSI", "Etat", "ID (Nom) de la Règle", "Date implémentation /Révision", "Opérateur"],
-        objectsFW: ["Group Name", "Object Name", "IP", "Type"],
-        portsFW: ["Protocol", "Port", "Service Name", "Port Name"],
-    };
+function createSheetsAndHeaders(excel, sheetNames, headers, defaultStyle) {
+    const formatHeader = excel.addStyle(defaultStyle);
+    const sheets = {};
 
-    Object.entries(headers).forEach(([key, value], index) => {
-        value.forEach((header, colIndex) => {
-            excel.set(index, colIndex, 0, header, formatHeader);
-            excel.set(index, colIndex, undefined, "auto");
-        });
+    Object.keys(sheetNames).forEach((key) => {
+        if (!headers[key]) {
+            console.error(`No headers found for key: ${key}`);
+            return; // Skip creating this sheet if headers are not found
+        }
+        const sheet = excel.addSheet(sheetNames[key]);
+    
+        sheets[key] = sheet;
+        setHeaders(sheet, headers[key], formatHeader);
+    });
+
+    return sheets;
+}
+
+function setHeaders(sheet, headers, style) {
+    if (!headers) {
+        console.error('Headers are undefined, cannot set headers in the sheet.');
+        return;
+    }
+    headers.forEach((header, index) => {
+        excel.set(sheet, index, 0, header, style);
     });
 }
-setHeaders();
 
 // permet de créer une clé unique pour chaque objet en fonction de son groupe, nom, ip et type
 function getKeyFromObject(obj) {
@@ -91,70 +114,70 @@ function getKeyFromObject(obj) {
 }
 
 function handleFlow(element) {
-    let ip_tab = [];
-    let names_tab = [];
-    let NodeFromGroup = [];
-    let GroupFromGroup = [];
-    let groupName = [];
+    let ip_from_interface = [];
+    let name_from_node = [];
+    let name_from_group = [];
+    let node_from_group = [];
+    let group_from_group = [];
 
     switch (element.attr('type')) {
         case "technology-interface":
-            ip_tab = element.prop("IP address", false);
-            let Names_tab_from_interface = getElementsFromRelationship(compositionRelationship,"target", "node", element[0].concept.id, "source");
-            if (Names_tab_from_interface.length == 0){
+            ip_from_interface = element.prop("IP address", false);
+            let check_name_from_node = getElementsFromRelationship(compositionRelationship,"target", "node", element[0].concept.id, "source");
+            if (check_name_from_node.length == 0){
                 // VIP or LB
-                names_tab.push(element.prop("Name", false));
-                ip_tab = element.prop("IP address", false);
+                name_from_node.push(element.prop("Name", false));
+                ip_from_interface = element.prop("IP address", false);
                 
             }else{
-                for (var i = 0; i < Names_tab_from_interface.length; i++) {
+                for (var i = 0; i < check_name_from_node.length; i++) {
 
-                    if (getElementsFromRelationship(compositionRelationship,"source", "technology-interface", Names_tab_from_interface[i].attr('id'), "target").length > 1){
+                    if (getElementsFromRelationship(compositionRelationship,"source", "technology-interface", check_name_from_node[i].attr('id'), "target").length > 1){
                         // Multiple IP for the same node
-                        names_tab.push(Names_tab_from_interface[i].attr('name')+"-"+ip_tab);
+                        name_from_node.push(check_name_from_node[i].attr('name')+"-"+ip_from_interface);
                     }else{
-                        names_tab.push(Names_tab_from_interface[i].attr('name'));       
+                        name_from_node.push(check_name_from_node[i].attr('name'));       
                     }
                 }
             }
-            object = {group:"",name: names_tab, ip: ip_tab, type: "Host"};
+            object = {group:"",name: name_from_node, ip: ip_from_interface, type: "Host"};
             uniqueObject.set(getKeyFromObject(object), object);
 
             break;
         case "grouping":
             console.log("Parents "+element[0].concept.name);
 
-            NodeFromGroup.push(getElementsFromRelationship(aggregationRelationship,"source", "node", element[0].concept.id, "target"));  
+            node_from_group.push(getElementsFromRelationship(aggregationRelationship,"source", "node", element[0].concept.id, "target"));  
 
-            NodeFromGroup.forEach(function(nodes){
+            node_from_group.forEach(function(nodes){
                 nodes.forEach(function(node){
                     if (node.attr('type') == "node"){
                         let target = handleFlow(node) 
-                        for (var i = 0; i < target.names_tab.length; i++) {
-                            names_tab.push(target.names_tab[i]);
-                            ip_tab.push(target.ip_tab[i]);
+                        for (var i = 0; i < target.name_from_node.length; i++) {
+                            name_from_node.push(target.name_from_node[i]);
+                            ip_from_interface.push(target.ip_from_interface[i]);
                         }
                     }
 
                 });
             });
             
-            GroupFromGroup.push(getElementsFromRelationship(compositionRelationship,"source", "grouping", element[0].concept.id, "target"))
-            GroupFromGroup.forEach(function(groups){
+            group_from_group.push(getElementsFromRelationship(compositionRelationship,"source", "grouping", element[0].concept.id, "target"))
+            group_from_group.forEach(function(groups){
                 groups.forEach(function(group){
                     if (group.attr('type') == "grouping"){
                         console.log("Enfant "+group.attr('name'));
 
                         let groupIds = getElementsFromRelationship(compositionRelationship,"target", "grouping", group[0].concept.id, "source");
                         for (var i = 0; i < groupIds.length; i++) {
-                            groupName.push(groupIds[i].attr('name'));
+                            name_from_group.push(groupIds[i].attr('name'));
                         }
-                        object = {group:groupName,name: group.attr('name'), ip: "", type: "Group"};
+                        object = {group:name_from_group,name: group.attr('name'), ip: "", type: "Group"};
                         uniqueObject.set(getKeyFromObject(object), object);
                         let target = handleFlow(group);
-                        for (var i = 0; i < target.names_tab.length; i++) {
-                            names_tab.push(target.names_tab[i]);
-                            ip_tab.push(target.ip_tab[i]);
+                        for (var i = 0; i < target.name_from_node.length; i++) {
+                            name_from_node.push(target.name_from_node[i]);
+                            ip_from_interface.push(target.ip_from_interface[i]);
                         }
 
                     }
@@ -168,28 +191,28 @@ function handleFlow(element) {
             let sourceIds = getElementsFromRelationship(compositionRelationship,"source", "technology-interface", element[0].concept.id, "target");
 
             for (var i = 0; i < sourceIds.length; i++) {
-                ip_tab.push(sourceIds[i].attr("name"));
+                ip_from_interface.push(sourceIds[i].attr("name"));
             }
 
             // regarder si le noeud est dans un groupe et ajouter le nom du groupe à la liste
             let groupIds = getElementsFromRelationship(aggregationRelationship,"target", "grouping", element[0].concept.id, "source");
             for (var i = 0; i < groupIds.length; i++) {
-                groupName.push(groupIds[i].attr('name'));
+                name_from_group.push(groupIds[i].attr('name'));
             }
 
-            ip_tab.forEach(function(ip){
+            ip_from_interface.forEach(function(ip){
 
-                if (ip_tab.length > 1){
+                if (ip_from_interface.length > 1){
                     // Multiple IP from node for the same node
-                    names_tab.push(element.attr('name')+"-"+ip);
-                    object = {group:groupName,name: element.attr('name')+"-"+ip, ip: ip, type: "Host"};
+                    name_from_node.push(element.attr('name')+"-"+ip);
+                    object = {group:name_from_group,name: element.attr('name')+"-"+ip, ip: ip, type: "Host"};
                     uniqueObject.set(getKeyFromObject(object), object);
 
                 }else{
-                    // si element.attr('name') pas dans la liste names_tab alors on l'ajoute
-                    if (!names_tab.includes(element.attr('name'))){
-                        names_tab.push(element.attr('name'));
-                        object = {group:groupName,name: element.attr('name'), ip: ip, type: "Host"};
+                    // si element.attr('name') pas dans la liste name_from_node alors on l'ajoute
+                    if (!name_from_node.includes(element.attr('name'))){
+                        name_from_node.push(element.attr('name'));
+                        object = {group:name_from_group,name: element.attr('name'), ip: ip, type: "Host"};
                         uniqueObject.set(getKeyFromObject(object), object);
                     }
                 }
@@ -197,10 +220,10 @@ function handleFlow(element) {
             
             break;
         case "communication-network":
-            names_tab.push(element.attr('name'));
-            ip_tab = element.prop("Network", true);
-            ip_tab.forEach(function(ip){
-                object = {group:"",name: names_tab, ip: ip, type: "Network"};
+            name_from_node.push(element.attr('name'));
+            ip_from_interface = element.prop("Network", true);
+            ip_from_interface.forEach(function(ip){
+                object = {group:"",name: name_from_node, ip: ip, type: "Network"};
                 uniqueObject.set(getKeyFromObject(object), object);
             });
 
@@ -209,7 +232,7 @@ function handleFlow(element) {
             console.log("Unhandled source type: " + sourceType);
             break;
     }
-    return { names_tab, ip_tab };
+    return { name_from_node, ip_from_interface };
 }
 
 function getElementsFromRelationship(relation_type,relation_check, element_type, element_check, element_return){
@@ -274,10 +297,10 @@ function processFlowRelationship(flowRelationship) {
     return rowData = [
         ...new Array(6).fill(""),
         cleanAndJoin(flowRelationship.concept.documentation),
-        cleanAndJoin(source.names_tab),
-        cleanAndJoin(source.ip_tab),
-        cleanAndJoin(target.names_tab),
-        cleanAndJoin(target.ip_tab),
+        cleanAndJoin(source.name_from_node),
+        cleanAndJoin(source.ip_from_interface),
+        cleanAndJoin(target.name_from_node),
+        cleanAndJoin(target.ip_from_interface),
         cleanAndJoin(serviceName),
         cleanAndJoin(ports),
         ...new Array(9).fill(""),
@@ -294,6 +317,13 @@ function processAllFlowRelationships(sheet,flowRelationships, checkFW) {
         }
     });
 }
+
+// MAIN
+
+const excel = $JExcel.new();
+excel.removeSheet("Sheet 0");
+const sheets = createSheetsAndHeaders(excel, SHEET_NAMES, HEADERS, DEFAULT_STYLE);
+
 
 // Processing all relationships without the 'FW' check
 processAllFlowRelationships(0,flowRelationship, false);
