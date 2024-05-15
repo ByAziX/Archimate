@@ -3,7 +3,7 @@
  * 
  * Show some stats in a message alert box
  * 
- * (c) 2024 Azix
+ * (c) 2024 MILLET Hugo
  * 
  * This work is licensed under the HUMANS Licence described below.
  * 
@@ -157,7 +157,6 @@ function handleFlow(element) {
                             ip_from_interface.push(target.ip_from_interface[i]);
                         }
                     }
-
                 });
             });
             
@@ -193,7 +192,7 @@ function handleFlow(element) {
             }
 
             // regarder si le noeud est dans un groupe et ajouter le nom du groupe à la liste
-            let groupIds = getElementsFromRelationship([aggregationRelationship,aggregationRelationship],"target", "grouping", element[0].concept.id, "source");
+            let groupIds = getElementsFromRelationship([aggregationRelationship,compositionRelationship],"target", "grouping", element[0].concept.id, "source");
             for (var i = 0; i < groupIds.length; i++) {
                 name_from_group.push(groupIds[i].attr('name'));
             }
@@ -361,4 +360,3 @@ uniquePorts.forEach((port, index) => {
 
 excel.generate(exportFile);
 console.log("> Export done");
-
