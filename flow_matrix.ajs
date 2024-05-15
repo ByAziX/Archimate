@@ -16,10 +16,8 @@
  *  - You can't use this script for commercial purposes unless you obtained it from the official Archi distribution channels.
  * 
  */
-
 load(__DIR__ + "lib/jszip-101.js");
 load(__DIR__ + "lib/myexcel.js");
-
 
 const serviceMap = {
     '443': 'HTTPS',
@@ -46,7 +44,6 @@ const SHEET_NAMES = {
     fwPorts: 'FW Ports'
 };
 
-
 const HEADERS = {
     rules: ["Demandeur CDP", "Demandeur Archi", "Type flux", "Prod/HP", "Env.", "In/Out", "Description", "Source Nom", "Source IP", "Destination Nom", "Destination IP", "Proto Nom", "Proto/Port", "Avis SSI", "Commentaire SSI", "Etat", "ID (Nom) de la Règle", "Date implémentation /Révision", "Opérateur"],
     objects: ["Group Name", "Object Name", "IP", "Type"],
@@ -57,7 +54,6 @@ const HEADERS = {
 };
 
 const DEFAULT_STYLE = { border: "none,none,none,thin #333333", font: "Calibri 12 #1B2A41 B", fill: "#f3f3f3" };
-
 
 console.show();
 console.clear();
@@ -74,12 +70,10 @@ let uniqueObject = new Map();
 let uniquePorts = new Set(); // Initialise un Set vide pour collecter les ports uniques
 let uniqueIP = new Set(); // Initialise un Set vide pour collecter les IP uniques
 let ip_set = new Set();
-
 if(exportFile == null) {
     console.log("> Export cancelled");
     exit();
 }
-
 console.log("> Starting Excel Export");
 function createSheetsAndHeaders(excel, sheetNames, headers, defaultStyle) {
     const formatHeader = excel.addStyle(defaultStyle);
@@ -95,7 +89,6 @@ function createSheetsAndHeaders(excel, sheetNames, headers, defaultStyle) {
         sheets[key] = sheet;
         setHeaders(sheet, headers[key], formatHeader);
     });
-
     return sheets;
 }
 
@@ -108,7 +101,6 @@ function setHeaders(sheet, headers, style) {
         excel.set(sheet, index, 0, header, style);
     });
 }
-
 // permet de créer une clé unique pour chaque objet en fonction de son groupe, nom, ip et type
 function getKeyFromObject(obj) {
     return `${obj.group}:${obj.name}:${obj.ip}:${obj.type}`;
@@ -120,83 +112,58 @@ function handleFlow(element) {
     let name_from_group = [];
     let node_from_group = [];
     let group_from_group = [];
-
     switch (element.attr('type')) {
         case "technology-interface":
-            ip_from_interface = element.prop("IP address", false);
             let check_name_from_node = getElementsFromRelationship([compositionRelationship,aggregationRelationship],"target", "node", element[0].concept.id, "source");
             if (check_name_from_node.length == 0){
                 // VIP or LB
                 name_from_node.push(element.prop("Name", false));
-                ip_from_interface = element.prop("IP address", false);
-                
+                ip_from_interface = element.prop("IP address", false); 
             }else{
-                for (var i = 0; i < check_name_from_node.length; i++) {
-                    if (getElementsFromRelationship([compositionRelationship,aggregationRelationship],"source", "technology-interface", check_name_from_node[i].attr('id'), "target").length > 1){
-                        // Multiple IP for the same node, node is unique in fw rules so we add the IP to the name
-                        name_from_node.push(check_name_from_node[i].attr('name')+"-"+ip_from_interface);
-                    }else{
-                        name_from_node.push(check_name_from_node[i].attr('name'));       
-                    }
-                }
+                ip_from_interface = element.prop("IP address", false);
+                check_name_from_node.forEach(node => {
+                    const techInterfaces = getElementsFromRelationship([compositionRelationship, aggregationRelationship], "source", "technology-interface", node.attr('id'), "target");
+                    const nodeName = techInterfaces.length > 1 ? `${node.attr('name')}-${ip_from_interface}` : node.attr('name');
+                    name_from_node.push(nodeName);
+                });
             }
             object = {group:"",name: name_from_node, ip: ip_from_interface, type: "Host"};
             uniqueObject.set(getKeyFromObject(object), object);
-
             break;
         case "grouping":
             console.log("Parents "+element[0].concept.name);
-
             node_from_group.push(getElementsFromRelationship([aggregationRelationship,compositionRelationship],"source", "node", element[0].concept.id, "target"));  
+            group_from_group.push(getElementsFromRelationship([compositionRelationship,aggregationRelationship],"source", "grouping", element[0].concept.id, "target"))
             node_from_group.forEach(function(nodes){
                 nodes.forEach(function(node){
                     if (node.attr('type') == "node"){
                         let target = handleFlow(node) 
-                        for (var i = 0; i < target.name_from_node.length; i++) {
-                            name_from_node.push(target.name_from_node[i]);
-                            ip_from_interface.push(target.ip_from_interface[i]);
-                        }
+                        name_from_node.push(...target.name_from_node);
+                        ip_from_interface.push(...target.ip_from_interface);
+                
                     }
                 });
             });
-            
-            group_from_group.push(getElementsFromRelationship([compositionRelationship,aggregationRelationship],"source", "grouping", element[0].concept.id, "target"))
             group_from_group.forEach(function(groups){
                 groups.forEach(function(group){
                     if (group.attr('type') == "grouping"){
                         console.log("Enfant "+group.attr('name'));
-
-                        let groupIds = getElementsFromRelationship([compositionRelationship,aggregationRelationship],"target", "grouping", group[0].concept.id, "source");
-                        for (var i = 0; i < groupIds.length; i++) {
-                            name_from_group.push(groupIds[i].attr('name'));
-                        }
+                        name_from_group.push(...getElementsFromRelationship([compositionRelationship, aggregationRelationship], "target", "grouping", group[0].concept.id, "source").map(groupId => groupId.attr('name')));
+                        let target = handleFlow(group);
+                        name_from_node.push(...target.name_from_node);
+                        ip_from_interface.push(...target.ip_from_interface);
                         object = {group:name_from_group,name: group.attr('name'), ip: "", type: "Group"};
                         uniqueObject.set(getKeyFromObject(object), object);
-                        let target = handleFlow(group);
-                        for (var i = 0; i < target.name_from_node.length; i++) {
-                            name_from_node.push(target.name_from_node[i]);
-                            ip_from_interface.push(target.ip_from_interface[i]);
-                        }
-
                     }
                 });
             });
 
-
             break;
         case "node": 
             // regarder si le noeud à plusieurs IP et les ajouter à la liste
-            let sourceIds = getElementsFromRelationship([compositionRelationship,aggregationRelationship],"source", "technology-interface", element[0].concept.id, "target");
-            for (var i = 0; i < sourceIds.length; i++) {
-                ip_from_interface.push(sourceIds[i].attr("name"));
-            }
-
+            ip_from_interface.push(...getElementsFromRelationship([compositionRelationship, aggregationRelationship], "source", "technology-interface", element[0].concept.id, "target").map(source => source.attr("name")));
             // regarder si le noeud est dans un groupe et ajouter le nom du groupe à la liste
-            let groupIds = getElementsFromRelationship([aggregationRelationship,compositionRelationship],"target", "grouping", element[0].concept.id, "source");
-            for (var i = 0; i < groupIds.length; i++) {
-                name_from_group.push(groupIds[i].attr('name'));
-            }
-
+            name_from_group.push(...getElementsFromRelationship([aggregationRelationship, compositionRelationship], "target", "grouping", element[0].concept.id, "source").map(group => group.attr('name')));
             ip_from_interface.forEach(function(ip){
 
                 if (ip_from_interface.length > 1){
@@ -235,7 +202,6 @@ function handleFlow(element) {
 function getElementsFromRelationship(relation_types,relation_check, element_type, element_check, element_return){
     var element = [];
     relation_types.forEach(function(relation_type) {
-        
         relation_type.forEach(function(relation) {
             if (relation.concept[relation_check].id == element_check && $("#"+relation.concept[element_return].id).attr('type') == element_type) { // if target of the composition-relationship is the source of the flow-relationship
                 element.push($("#"+relation.concept[element_return].id));
@@ -255,11 +221,7 @@ function cleanAndJoin(input) {
 }
 
 function addElementInExcel(sheet, column, row, value, style = null) {
-    if (style) {
-        excel.set(sheet, column, row, value, style);
-    } else {
-        excel.set(sheet, column, row, value);
-    }
+    excel.set(sheet, column, row, value, style || undefined);
 }
 
 function populateExcelRow(sheet, startColumn, row, data) {
@@ -268,50 +230,35 @@ function populateExcelRow(sheet, startColumn, row, data) {
     });
 }
 
-// Prepare and populate data OBJECTS and PORTS
-function prepareAndPopulateData(sheet,item, type, rowStart) {
-    let rowData;
-    
-    if (type === 'object') {
-        // get map value
-        rowData = [cleanAndJoin(item.group), cleanAndJoin(item.name),cleanAndJoin(item.ip),cleanAndJoin(item.type)];
-
-    } else if (type === 'port') {
-        let parts = item.split("/").map(cleanAndJoin);
-
-        let serviceName = serviceMap[parts[1]] || 'Unknown';
-        rowData = [parts[0], parts[1], serviceName, item];
-    }
+function prepareAndPopulateData(sheet, item, type, rowStart) {
+    let rowData = type === 'object' ?
+        [item.group, item.name, item.ip, item.type].map(cleanAndJoin) :
+        [item.split("/")[0], item.split("/")[1], serviceMap[item.split("/")[1]] || 'Unknown', item].map(cleanAndJoin);
 
     populateExcelRow(sheet, 0, rowStart, rowData);
 }
 
-// Helper function to process and retrieve data from flow relationships
 function processFlowRelationship(flowRelationship) {
     const source = handleFlow($("#" + flowRelationship.concept.source.id));
     const target = handleFlow($("#" + flowRelationship.concept.target.id));
     const ports = flowRelationship.prop("port", true);
-    const serviceName = ports.map(port => {
-        const parts = port.split("/").map(cleanAndJoin);
-        return serviceMap[parts[1]] || 'Unknown';
-    });
+    const serviceName = ports.map(port => serviceMap[port.split("/")[1]] || 'Unknown');
 
-    return rowData = [
+    return [
         ...new Array(6).fill(""),
-        cleanAndJoin(flowRelationship.concept.documentation),
-        cleanAndJoin(source.name_from_node),
-        cleanAndJoin(source.ip_from_interface),
-        cleanAndJoin(target.name_from_node),
-        cleanAndJoin(target.ip_from_interface),
-        cleanAndJoin(serviceName),
-        cleanAndJoin(ports),
-        ...new Array(9).fill(""),
-    ];
-
+        flowRelationship.concept.documentation,
+        source.name_from_node,
+        source.ip_from_interface,
+        target.name_from_node,
+        target.ip_from_interface,
+        serviceName.join("\n"),
+        ports.join("\n"),
+        ...new Array(9).fill("")
+    ].map(cleanAndJoin);
 }
 
-function processAllFlowRelationships(sheet,flowRelationships, checkFW) {
-    flowRelationships.each(flowRelationship => {
+function processAllFlowRelationships(sheet, flowRelationships, checkFW) {
+    flowRelationships.forEach(flowRelationship => {
         if (!checkFW || flowRelationship.prop("FW", false) === "true") {
             const rowData = processFlowRelationship(flowRelationship);
             populateExcelRow(sheet, 0, currentRow++, rowData);
@@ -320,43 +267,33 @@ function processAllFlowRelationships(sheet,flowRelationships, checkFW) {
     });
 }
 
-// MAIN
-const excel = $JExcel.new();
-excel.removeSheet("Sheet 0");
-const sheets = createSheetsAndHeaders(excel, SHEET_NAMES, HEADERS, DEFAULT_STYLE);
+function resetData() {
+    currentRow = 1;
+    currentRowObject = 1;
+    currentRowPort = 1;
+    uniqueObject.clear();
+    uniquePorts.clear();
+}
 
+function processAndPopulateBasedOnFWFlag(excel, flowRelationship, fwFlag, relationshipIndex, objectSheetIndex, portSheetIndex) {
+    resetData();
+    processAllFlowRelationships(relationshipIndex, flowRelationship, fwFlag);
+    uniqueObject.forEach((object) => prepareAndPopulateData(objectSheetIndex, object, 'object', currentRowObject++));
+    uniquePorts.forEach((port) => prepareAndPopulateData(portSheetIndex, port, 'port', currentRowPort++));
+}
 
-// Processing all relationships without the 'FW' check
-processAllFlowRelationships(0,flowRelationship, false);
+// MAIN Script
 
-// Populate data for unique objects and ports in dedicated sheets
-uniqueObject.forEach((object, index) => {
-    prepareAndPopulateData(1, object, 'object', currentRowObject++);
-});
+const excel = $JExcel.new();  // Create a new Excel document
+excel.removeSheet("Sheet 0"); // Remove default sheet
+const sheets = createSheetsAndHeaders(excel, SHEET_NAMES, HEADERS, DEFAULT_STYLE); // Create custom sheets
 
-uniquePorts.forEach((port, index) => {
-    prepareAndPopulateData(2, port, 'port', currentRowPort++);
-});
+// Process and populate without 'FW' filter
+processAndPopulateBasedOnFWFlag(excel, flowRelationship, false, 0, 1, 2);
 
+// Process and populate with 'FW' filter set to true
+processAndPopulateBasedOnFWFlag(excel, flowRelationship, true, 3, 4, 5);
 
-// Processing only those with 'FW' set to 'true' in FW Matrice
-
-currentRow = 1, currentRowObject = 1, currentRowPort = 1;
-uniqueObject = new Map();
-uniquePorts = new Set(); // Initialise un Set vide pour collecter les ports uniques
-
-// Processing only those with 'FW' set to 'true'
-processAllFlowRelationships(3,flowRelationship, true);
-
-// Populate data for unique objects and ports in dedicated sheets
-uniqueObject.forEach((object, index) => {
-    prepareAndPopulateData(4, object, 'object', currentRowObject++);
-});
-
-uniquePorts.forEach((port, index) => {
-    prepareAndPopulateData(5, port, 'port', currentRowPort++);
-});
-
-
+// Save and export the populated Excel file
 excel.generate(exportFile);
 console.log("> Export done");
