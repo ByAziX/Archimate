@@ -107,96 +107,76 @@ function getKeyFromObject(obj) {
 }
 
 function handleFlow(element) {
-    let ip_from_interface = [];
-    let name_from_node = [];
     let name_from_group = [];
-    let node_from_group = [];
-    let group_from_group = [];
+    let objectRules = new Map();
     switch (element.attr('type')) {
         case "technology-interface":
             let check_name_from_node = getElementsFromRelationship([compositionRelationship,aggregationRelationship],"target", "node", element[0].concept.id, "source");
             if (check_name_from_node.length == 0){
                 // VIP or LB
-                name_from_node.push(element.prop("Name", false));
-                ip_from_interface = element.prop("IP address", false); 
+                objectRules.set(element.prop("Name", false), element.prop("IP address", false));
             }else{
-                ip_from_interface = element.prop("IP address", false);
                 check_name_from_node.forEach(node => {
-                    const techInterfaces = getElementsFromRelationship([compositionRelationship, aggregationRelationship], "source", "technology-interface", node.attr('id'), "target");
-                    const nodeName = techInterfaces.length > 1 ? `${node.attr('name')}-${ip_from_interface}` : node.attr('name');
-                    name_from_node.push(nodeName);
+                    // check si le noeud a plusieurs IP
+                    const nodeName = getElementsFromRelationship([compositionRelationship, aggregationRelationship], "source", "technology-interface", node.attr('id'), "target").length > 1 ? `${node.attr('name')}-${element.prop("IP address", false)}` : node.attr('name');
+                    objectRules.set(nodeName, element.prop("IP address", false));
                 });
             }
-            object = {group:"",name: name_from_node, ip: ip_from_interface, type: "Host"};
+            object = {group:"",name: element.prop("Name", false), ip: element.prop("IP address", false), type: "Host"};
             uniqueObject.set(getKeyFromObject(object), object);
             break;
         case "grouping":
             console.log("Parents "+element[0].concept.name);
-            node_from_group.push(getElementsFromRelationship([aggregationRelationship,compositionRelationship],"source", "node", element[0].concept.id, "target"));  
-            group_from_group.push(getElementsFromRelationship([compositionRelationship,aggregationRelationship],"source", "grouping", element[0].concept.id, "target"))
-            node_from_group.forEach(function(nodes){
-                nodes.forEach(function(node){
-                    if (node.attr('type') == "node"){
-                        let target = handleFlow(node) 
-                        name_from_node.push(...target.name_from_node);
-                        ip_from_interface.push(...target.ip_from_interface);
-                
+            getElementsFromRelationship([aggregationRelationship,compositionRelationship],"source", "node", element[0].concept.id, "target").forEach(function(nodes){
+                    if (nodes.attr('type') == "node"){
+                        let target = handleFlow(nodes) 
+                        for (const [key, value] of target.objectRules.entries()) {
+                            objectRules.set(key, value);
+                        }
                     }
-                });
             });
-            group_from_group.forEach(function(groups){
-                groups.forEach(function(group){
-                    if (group.attr('type') == "grouping"){
-                        console.log("Enfant "+group.attr('name'));
-                        name_from_group.push(...getElementsFromRelationship([compositionRelationship, aggregationRelationship], "target", "grouping", group[0].concept.id, "source").map(groupId => groupId.attr('name')));
-                        let target = handleFlow(group);
-                        name_from_node.push(...target.name_from_node);
-                        ip_from_interface.push(...target.ip_from_interface);
-                        object = {group:name_from_group,name: group.attr('name'), ip: "", type: "Group"};
+            getElementsFromRelationship([compositionRelationship,aggregationRelationship],"source", "grouping", element[0].concept.id, "target").forEach(function(groups){
+                    if (groups.attr('type') == "grouping"){
+                        console.log("Enfant "+groups.attr('name'));
+                        name_from_group.push(...getElementsFromRelationship([compositionRelationship, aggregationRelationship], "target", "grouping", groups[0].concept.id, "source").map(groupId => groupId.attr('name')));
+                        let target = handleFlow(groups);
+                        for (const [key, value] of target.objectRules.entries()) {
+                            objectRules.set(key, value);
+                        }
+
+                        object = {group:name_from_group,name: groups.attr('name'), ip: "", type: "Group"};
                         uniqueObject.set(getKeyFromObject(object), object);
                     }
-                });
             });
 
             break;
         case "node": 
-            // regarder si le noeud à plusieurs IP et les ajouter à la liste
-            ip_from_interface.push(...getElementsFromRelationship([compositionRelationship, aggregationRelationship], "source", "technology-interface", element[0].concept.id, "target").map(source => source.attr("name")));
             // regarder si le noeud est dans un groupe et ajouter le nom du groupe à la liste
-            name_from_group.push(...getElementsFromRelationship([aggregationRelationship, compositionRelationship], "target", "grouping", element[0].concept.id, "source").map(group => group.attr('name')));
-            ip_from_interface.forEach(function(ip){
-
-                if (ip_from_interface.length > 1){
+            getElementsFromRelationship([compositionRelationship, aggregationRelationship], "source", "technology-interface", element[0].concept.id, "target").map(source => source.attr("name")).forEach(function(ip){
+                if (getElementsFromRelationship([compositionRelationship, aggregationRelationship], "source", "technology-interface", element[0].concept.id, "target").map(source => source.attr("name")).length > 1){
                     // Multiple IP from node for the same node
-                    name_from_node.push(element.attr('name')+"-"+ip);
-                    object = {group:name_from_group,name: element.attr('name')+"-"+ip, ip: ip, type: "Host"};
+                    objectRules.set(element.attr('name')+"-"+ip, ip);
+                    object = {group:getElementsFromRelationship([aggregationRelationship, compositionRelationship], "target", "grouping", element[0].concept.id, "source").map(group => group.attr('name')),name: element.attr('name')+"-"+ip, ip: ip, type: "Host"};
                     uniqueObject.set(getKeyFromObject(object), object);
-
                 }else{
                     // si element.attr('name') pas dans la liste name_from_node alors on l'ajoute
-                    if (!name_from_node.includes(element.attr('name'))){
-                        name_from_node.push(element.attr('name'));
-                        object = {group:name_from_group,name: element.attr('name'), ip: ip, type: "Host"};
-                        uniqueObject.set(getKeyFromObject(object), object);
-                    }
+                    objectRules.set(element.attr('name'), ip);
+                    object = {group:getElementsFromRelationship([aggregationRelationship, compositionRelationship], "target", "grouping", element[0].concept.id, "source").map(group => group.attr('name')),name: element.attr('name'), ip: ip, type: "Host"};
+                    uniqueObject.set(getKeyFromObject(object), object);
                 }
             });
             
             break;
         case "communication-network":
-            name_from_node.push(element.attr('name'));
-            ip_from_interface = element.prop("Network", true);
-            ip_from_interface.forEach(function(ip){
-                object = {group:"",name: name_from_node, ip: ip, type: "Network"};
-                uniqueObject.set(getKeyFromObject(object), object);
-            });
-
+            objectRules.set(element.attr('name'), element.prop("Network", false));
+            object = {group:"",name: element.attr('name'), ip: element.prop("Network", true), type: "Network"};
+            uniqueObject.set(getKeyFromObject(object), object);
             break;
         default:
             console.log("Unhandled source type: " + sourceType);
             break;
     }
-    return { name_from_node, ip_from_interface };
+    return { objectRules };
 }
 
 function getElementsFromRelationship(relation_types,relation_check, element_type, element_check, element_return){
@@ -243,14 +223,13 @@ function processFlowRelationship(flowRelationship) {
     const target = handleFlow($("#" + flowRelationship.concept.target.id));
     const ports = flowRelationship.prop("port", true);
     const serviceName = ports.map(port => serviceMap[port.split("/")[1]] || 'Unknown');
-
     return [
         ...new Array(6).fill(""),
         flowRelationship.concept.documentation,
-        source.name_from_node,
-        source.ip_from_interface,
-        target.name_from_node,
-        target.ip_from_interface,
+        [...source.objectRules.keys()].join("\n"),
+        [...source.objectRules.values()].join("\n"),
+        [...target.objectRules.keys()].join("\n"),
+        [...target.objectRules.values()].join("\n"),
         serviceName.join("\n"),
         ports.join("\n"),
         ...new Array(9).fill("")
