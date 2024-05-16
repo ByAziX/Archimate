@@ -1,21 +1,15 @@
 /*
- * Statistics
- * 
- * Show some stats in a message alert box
- * 
- * (c) 2024 Azix
  * 
  * This work is licensed under the HUMANS Licence described below.
  * 
- * The HUMANS (Help Us Make Archi Noteworthy & Sustainable) licence goal is to bring happiness
- * to both Archi users and developers. This means that we would like users of
- * jArchi to donate something and get this useful script as a gift in return (and feel great!).
- *
- * The only restrictions that apply are:
- *  - You can't redistribute this script.
- *  - You can't use this script for commercial purposes unless you obtained it from the official Archi distribution channels.
- * 
- */
+ * Author: Hugo Millet
+ * License: 
+
+ * This JavaScript script is designed to automate the generation of flow matrices from cartographic data.
+ * Primarily used within the Archi software environment, this tool helps in visualizing and analyzing the flow of information, resources, or data between different components or entities in a system architecture. 
+ * The script extracts relevant data points from the cartographic representations and processes them to construct comprehensive flow matrices.
+ * (c) 2024 MILLET Hugo 
+*/
 load(__DIR__ + "lib/jszip-101.js");
 load(__DIR__ + "lib/myexcel.js");
 
@@ -60,7 +54,7 @@ console.clear();
 var nodes = $("node");
 var view = selection.parents().add(selection).filter("view").first();
 console.log("> Exporting view: " + $(view).attr("name"));
-var flowRelationship = $(view).find("flow-relationship"); // Build a collection containing the view, and then get all flow-relationship in this view.
+var flowRelationship = $(view).find("flow-relationship"); // Build a collection containing the flow-relationship, and then get all flow-relationship in this view.
 var compositionRelationship = $(view).find("composition-relationship"); // Build a collection containing the composition-relationship, and then get all flow-relationship in this view.
 var aggregationRelationship = $(view).find("aggregation-relationship"); // Build a collection containing the aggregation-relationship, and then get all flow-relationship in this view.
 var defaultFileName = model.name+"_"+$(view).attr("name") ? model.name+"_"+$(view).attr("name") + ".xlsx" : "Exported Model.xlsx"; // Default file name
